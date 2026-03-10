@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.vitest-temp/
+.tmp/
+.tmp-assets/
+.cache/
+library/
+*.log
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
