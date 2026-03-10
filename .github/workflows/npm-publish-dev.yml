@@ -1,20 +1,23 @@
-name: Publish npm dev
+name: Publish npm
 
 on:
   push:
     branches:
       - main
+    tags:
+      - v*
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: npm-publish-dev-${{ github.ref }}
-  cancel-in-progress: true
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish-dev:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
           registry-url: https://registry.npmjs.org
@@ -58,5 +61,54 @@ jobs:
             echo
             echo "- Version: ${{ steps.version.outputs.version }}"
             echo "- Dist-tag: dev"
+            echo "- Registry: npmjs.org"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify release tag matches package version
+        id: version
+        run: |
+          version="$(npm run --silent publish:verify-release -- "$GITHUB_REF_NAME")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Validated release version: $version"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify packed files
+        run: npm run pack:check
+
+      - name: Publish to npm latest dist-tag
+        run: npm publish --tag latest --provenance --access public
+
+      - name: Summarize publish result
+        run: |
+          {
+            echo "## npm stable publish"
+            echo
+            echo "- Version: ${{ steps.version.outputs.version }}"
+            echo "- Dist-tag: latest"
+            echo "- Tag: ${{ github.ref_name }}"
             echo "- Registry: npmjs.org"
           } >> "$GITHUB_STEP_SUMMARY"

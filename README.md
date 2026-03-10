@@ -1,6 +1,6 @@
 # ImgBin
 
-ImgBin is a TypeScript CLI for generating image assets, importing existing images into a managed library, writing searchable metadata, creating thumbnails, and running local Claude CLI image metadata analysis.
+ImgBin is a TypeScript CLI for generating image assets, importing existing images into a managed library, writing searchable metadata, searching managed libraries, creating thumbnails, and running local Claude CLI image metadata analysis.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ cp .env.example .env
 
 ## Release automation
 
-ImgBin includes a GitHub Actions based npm publishing flow for both prerelease and stable channels.
+ImgBin includes a GitHub Actions based npm publishing workflow for both prerelease and stable channels.
 
 ### Publishing channels
 
@@ -46,6 +46,7 @@ Before the workflows can publish successfully:
 3. keep GitHub Actions enabled for the repository.
 
 The workflows are designed to publish with GitHub OIDC identity and provenance, not a long-lived `NPM_TOKEN`.
+Keep the trusted publisher configuration pointed at the repository's single publish workflow file.
 
 ### Local release verification
 
@@ -209,6 +210,46 @@ imgbin annotate ./library/2026-03/orange-dashboard-hero \
 ```bash
 imgbin thumbnail ./library/2026-03/orange-dashboard-hero
 ```
+
+### Search a managed library
+
+Search matches can use asset title, tags, description, generated prompt text, import provenance, and managed asset paths.
+
+```bash
+imgbin search \
+  --library ./library \
+  --query "orange hero" \
+  --exact
+```
+
+For typo-tolerant retrieval, switch to fuzzy matching:
+
+```bash
+imgbin search \
+  --library ./library \
+  --query "orng herp" \
+  --fuzzy
+```
+
+To rebuild the library index before searching:
+
+```bash
+imgbin search \
+  --library ./library \
+  --query "dashboard" \
+  --reindex
+```
+
+To consume results from scripts:
+
+```bash
+imgbin search \
+  --library ./library \
+  --query "launch hero" \
+  --json
+```
+
+ImgBin stores the reusable search index at `.imgbin/search-index.json` under the library root. Existing libraries do not need migration; the index is created lazily on first search and refreshed automatically after generate, import, annotate, and thumbnail operations when possible.
 
 ### Run a batch manifest
 
