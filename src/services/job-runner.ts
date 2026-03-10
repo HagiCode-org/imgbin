@@ -17,6 +17,7 @@ import { AssetWriter } from './asset-writer.js';
 import { ManagedAssetScanner } from './managed-asset-scanner.js';
 import { MetadataService } from './metadata.js';
 import { PromptSourceLoader } from './prompt-source-loader.js';
+import { SearchIndexService, deriveLibraryRootFromAssetDir } from './search-index.js';
 import { ThumbnailService } from './thumbnail.js';
 
 export interface JobRunnerDependencies {
@@ -27,6 +28,7 @@ export interface JobRunnerDependencies {
   thumbnailService: ThumbnailService;
   promptSourceLoader: PromptSourceLoader;
   managedAssetScanner: ManagedAssetScanner;
+  searchIndexService: SearchIndexService;
   defaultAnalysisPromptPath: string;
   thumbnailConfig: {
     size: number;
@@ -143,6 +145,7 @@ export class JobRunner {
     }
 
     const metadataPath = await this.deps.metadataService.save(assetDir, metadata);
+    await this.syncSearchIndex(assetDir, input.output);
     return this.finalizeCommandResult('Generated asset', assetDir, metadataPath, steps);
   }
 
@@ -206,6 +209,7 @@ export class JobRunner {
     }
 
     const metadataPath = await this.deps.metadataService.save(assetDir, metadata);
+    await this.syncSearchIndex(assetDir, input.importTo);
     return this.finalizeCommandResult(input.importTo ? 'Imported and analyzed asset' : 'Annotated asset', assetDir, metadataPath, steps);
   }
 
@@ -222,6 +226,7 @@ export class JobRunner {
     metadata = thumbnailResult.metadata;
     steps.push(thumbnailResult.step);
     const metadataPath = await this.deps.metadataService.save(assetDir, metadata);
+    await this.syncSearchIndex(assetDir);
 
     return this.finalizeCommandResult('Created thumbnail', assetDir, metadataPath, steps);
   }
@@ -448,6 +453,15 @@ export class JobRunner {
       return candidate;
     } catch {
       throw new AppError(`Managed asset metadata not found for ${assetPath}. Use --import-to to copy a standalone image into the library first.`, 2);
+    }
+  }
+
+  private async syncSearchIndex(assetDir: string, libraryRoot?: string): Promise<void> {
+    const resolvedLibraryRoot = path.resolve(libraryRoot ?? deriveLibraryRootFromAssetDir(assetDir));
+    try {
+      await this.deps.searchIndexService.syncAsset(resolvedLibraryRoot, assetDir);
+    } catch {
+      // Search index sync is best-effort; the search command can rebuild lazily later.
     }
   }
 }

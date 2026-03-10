@@ -3,6 +3,7 @@ import { Command, CommanderError } from 'commander';
 import { registerAnnotateCommand } from './commands/annotate.js';
 import { registerBatchCommand } from './commands/batch.js';
 import { registerGenerateCommand } from './commands/generate.js';
+import { registerSearchCommand } from './commands/search.js';
 import { registerThumbnailCommand } from './commands/thumbnail.js';
 import { AppError } from './lib/errors.js';
 import { createRuntime, type CliRuntime, type RuntimeOptions } from './lib/runtime.js';
@@ -22,6 +23,7 @@ export function buildCli(runtime: CliRuntime): Command {
   registerAnnotateCommand(program, runtime);
   registerThumbnailCommand(program, runtime);
   registerBatchCommand(program, runtime);
+  registerSearchCommand(program, runtime);
 
   return program;
 }

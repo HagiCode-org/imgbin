@@ -9,8 +9,10 @@ import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
 import { ManifestLoader } from '../services/manifest-loader.js';
 import { MetadataService } from '../services/metadata.js';
 import { PromptSourceLoader } from '../services/prompt-source-loader.js';
+import { SearchIndexService } from '../services/search-index.js';
+import { SearchService } from '../services/search-service.js';
 import { ThumbnailService } from '../services/thumbnail.js';
-import type { ImageGenerationProvider, VisionRecognitionProvider } from '../types.js';
+import type { ImageGenerationProvider, SearchQueryService, VisionRecognitionProvider } from '../types.js';
 
 export interface RuntimeOptions {
   cwd?: string;
@@ -26,6 +28,7 @@ export interface CliRuntime {
   logger: Logger;
   manifestLoader: ManifestLoader;
   jobRunner: JobRunner;
+  searchService: SearchQueryService;
 }
 
 export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
@@ -37,6 +40,7 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
   const thumbnailService = new ThumbnailService();
   const promptSourceLoader = new PromptSourceLoader();
   const managedAssetScanner = new ManagedAssetScanner();
+  const searchIndexService = new SearchIndexService(metadataService);
 
   const imageProvider = options.imageProvider ?? (config.imageApi ? new HttpImageGenerationProvider(requireImageProviderConfig(config.imageApi)) : undefined);
   const visionProvider = options.visionProvider ?? new ClaudeMetadataProvider(config.analysisCli);
@@ -49,6 +53,7 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
     },
     logger,
     manifestLoader: new ManifestLoader(),
+    searchService: new SearchService(searchIndexService),
     jobRunner: new JobRunner({
       imageProvider,
       visionProvider,
@@ -57,6 +62,7 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
       thumbnailService,
       promptSourceLoader,
       managedAssetScanner,
+      searchIndexService,
       defaultAnalysisPromptPath: config.analysisPromptPath,
       thumbnailConfig: config.thumbnail,
       now: () => new Date()

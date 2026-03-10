@@ -1,6 +1,14 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import type { AnalysisPromptMetadata, AssetMetadata, ProcessingState, PromptSourceMetadata, VisionRecognitionResult } from '../types.js';
+import type {
+  AnalysisPromptMetadata,
+  AssetMetadata,
+  ProcessingState,
+  PromptSourceMetadata,
+  SearchIndexDocument,
+  SearchableField,
+  VisionRecognitionResult
+} from '../types.js';
 import { titleFromSlug } from '../lib/slug.js';
 
 export interface CreateMetadataInput {
@@ -229,8 +237,76 @@ export class MetadataService {
       description: resolvedDescription
     };
   }
+
+  public toSearchDocument(metadata: AssetMetadata): SearchIndexDocument {
+    const resolved = this.resolvePresentationFields(metadata);
+    const metadataPath = path.join(resolved.paths.assetDir, 'metadata.json');
+    const fields = buildSearchFields(resolved);
+
+    return {
+      assetId: resolved.assetId,
+      slug: resolved.slug,
+      assetDir: resolved.paths.assetDir,
+      metadataPath,
+      title: resolved.title,
+      tags: resolved.tags,
+      description: resolved.description,
+      updatedAt: resolved.timestamps.updatedAt ?? resolved.timestamps.createdAt,
+      fields,
+      searchText: normalizeText(
+        Object.values(fields)
+          .flat()
+          .join(' ')
+      )
+    };
+  }
 }
 
 function dedupeStrings(values: string[]): string[] {
   return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean)));
+}
+
+function buildSearchFields(metadata: AssetMetadata): Record<SearchableField, string[]> {
+  return {
+    slug: dedupeStrings([metadata.slug]),
+    title: dedupeStrings([
+      metadata.title,
+      metadata.manual?.title,
+      metadata.recognized?.title,
+      metadata.generated.title
+    ].filter(isString)),
+    tags: dedupeStrings([
+      ...metadata.tags,
+      ...(metadata.manual?.tags ?? []),
+      ...(metadata.recognized?.tags ?? []),
+      ...(metadata.generated.tags ?? [])
+    ]),
+    description: dedupeStrings([
+      metadata.description,
+      metadata.manual?.description,
+      metadata.recognized?.description
+    ].filter(isString)),
+    'generated.prompt': dedupeStrings([
+      metadata.generated.prompt,
+      metadata.generated.promptSource?.context
+    ].filter(isString)),
+    'generated.promptSource.path': dedupeStrings([
+      metadata.generated.promptSource?.path
+    ].filter(isString)),
+    'source.originalPath': dedupeStrings([
+      metadata.source?.originalPath
+    ].filter(isString)),
+    assetPath: dedupeStrings([
+      metadata.paths.assetDir,
+      metadata.paths.original ? path.join(metadata.paths.assetDir, metadata.paths.original) : undefined
+    ].filter(isString))
+  };
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/gi, ' ').trim();
+}
+
+function isString(value: string | undefined): value is string {
+  return Boolean(value?.trim());
 }

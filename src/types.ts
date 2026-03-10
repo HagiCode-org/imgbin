@@ -180,6 +180,88 @@ export interface BatchCommandInput {
   dryRun: boolean;
 }
 
+export type SearchMatchMode = 'exact' | 'fuzzy';
+export type SearchOutputFormat = 'text' | 'json';
+export type SearchableField =
+  | 'slug'
+  | 'title'
+  | 'tags'
+  | 'description'
+  | 'generated.prompt'
+  | 'generated.promptSource.path'
+  | 'source.originalPath'
+  | 'assetPath';
+
+export interface SearchCommandInput {
+  library: string;
+  query: string;
+  mode: SearchMatchMode;
+  limit: number;
+  output: SearchOutputFormat;
+  reindex: boolean;
+}
+
+export interface SearchIndexDocument {
+  assetId: string;
+  slug: string;
+  assetDir: string;
+  metadataPath: string;
+  title: string;
+  tags: string[];
+  description?: string;
+  updatedAt: string;
+  fields: Record<SearchableField, string[]>;
+  searchText: string;
+}
+
+export interface SearchIndexFile {
+  version: 1;
+  libraryRoot: string;
+  generatedAt: string;
+  indexedCount: number;
+  skippedCount: number;
+  sourceFingerprints: Record<string, string>;
+  documents: SearchIndexDocument[];
+}
+
+export interface SearchIndexBuildStats {
+  scannedCount: number;
+  indexedCount: number;
+  skippedCount: number;
+  skippedAssets: string[];
+}
+
+export interface SearchIndexBuildResult {
+  index: SearchIndexFile;
+  stats: SearchIndexBuildStats;
+}
+
+export interface SearchResult {
+  assetId: string;
+  slug: string;
+  assetDir: string;
+  metadataPath: string;
+  title: string;
+  tags: string[];
+  description?: string;
+  score: number;
+  matchedFields: SearchableField[];
+}
+
+export interface SearchCommandResult {
+  success: boolean;
+  query: string;
+  mode: SearchMatchMode;
+  library: string;
+  rebuilt: boolean;
+  rebuildReason?: string;
+  indexPath: string;
+  indexedCount: number;
+  skippedCount: number;
+  totalMatches: number;
+  results: SearchResult[];
+}
+
 export interface CommandStepResult {
   step: CommandStepName;
   status: Exclude<ProcessingState, 'pending'>;
@@ -211,4 +293,8 @@ export interface ImageGenerationProvider {
 
 export interface VisionRecognitionProvider {
   recognizeImage(input: VisionRecognitionRequest): Promise<VisionRecognitionResult>;
+}
+
+export interface SearchQueryService {
+  search(input: SearchCommandInput): Promise<SearchCommandResult>;
 }
