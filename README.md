@@ -35,7 +35,7 @@ ImgBin includes a GitHub Actions based npm publishing flow for both prerelease a
 
 - Pushes to `main` publish a unique prerelease build to the npm `dev` dist-tag.
 - Stable releases publish only from Git tags in the `vX.Y.Z` format and target the npm `latest` dist-tag.
-- The stable release workflow fails if the Git tag version does not exactly match `repos/imgbin/package.json`.
+- The stable release workflow fails if the Git tag version does not exactly match `package.json`.
 
 ### Trusted publishing prerequisites
 
