@@ -23,6 +23,20 @@ function createRuntimeStub(): CliRuntime {
     manifestLoader: {
       load: vi.fn(async () => ({ jobs: [] }))
     },
+    searchService: {
+      search: vi.fn(async () => ({
+        success: true,
+        query: 'orange hero',
+        mode: 'exact',
+        library: '/tmp/library',
+        rebuilt: false,
+        indexPath: '/tmp/library/.imgbin/search-index.json',
+        indexedCount: 0,
+        skippedCount: 0,
+        totalMatches: 0,
+        results: []
+      }))
+    },
     jobRunner: {
       generate: vi.fn(async () => ({ success: true, message: 'generated', steps: [] })),
       annotate: vi.fn(async () => ({ success: true, message: 'annotated', steps: [] })),
@@ -77,5 +91,34 @@ describe('CLI parsing', () => {
     });
 
     expect(exitCode).toBe(1);
+  });
+
+  it('maps search flags into the search service input', async () => {
+    const runtime = createRuntimeStub();
+    const cli = buildCli(runtime);
+
+    await cli.parseAsync([
+      'node',
+      'imgbin',
+      'search',
+      '--library',
+      './library',
+      '--query',
+      'orange hero',
+      '--fuzzy',
+      '--limit',
+      '5',
+      '--json',
+      '--reindex'
+    ]);
+
+    expect(runtime.searchService.search).toHaveBeenCalledWith({
+      library: './library',
+      query: 'orange hero',
+      mode: 'fuzzy',
+      limit: 5,
+      output: 'json',
+      reindex: true
+    });
   });
 });

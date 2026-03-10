@@ -6,6 +6,8 @@ import { JobRunner } from '../services/job-runner.js';
 import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
 import { MetadataService } from '../services/metadata.js';
 import { PromptSourceLoader } from '../services/prompt-source-loader.js';
+import { SearchIndexService } from '../services/search-index.js';
+import { SearchService } from '../services/search-service.js';
 import { ThumbnailService } from '../services/thumbnail.js';
 import { createPngBuffer, createTempDir, FakeImageProvider, FakeVisionProvider } from './helpers.js';
 
@@ -23,14 +25,16 @@ function createRunner(options: {
   now?: Date;
   defaultAnalysisPromptPath?: string;
 }) {
+  const metadataService = new MetadataService();
   return new JobRunner({
     imageProvider: options.imageProvider,
     visionProvider: options.visionProvider,
     assetWriter: new AssetWriter(),
-    metadataService: new MetadataService(),
+    metadataService,
     thumbnailService: new ThumbnailService(),
     promptSourceLoader: new PromptSourceLoader(),
     managedAssetScanner: new ManagedAssetScanner(),
+    searchIndexService: new SearchIndexService(metadataService),
     defaultAnalysisPromptPath: options.defaultAnalysisPromptPath ?? defaultAnalysisPromptPath,
     thumbnailConfig: {
       size: 64,
@@ -102,6 +106,7 @@ describe('integration flows', () => {
       thumbnailService: new ThumbnailService(),
       promptSourceLoader: new PromptSourceLoader(),
       managedAssetScanner: new ManagedAssetScanner(),
+      searchIndexService: new SearchIndexService(metadataService),
       defaultAnalysisPromptPath,
       thumbnailConfig: {
         size: 64,
@@ -217,5 +222,80 @@ describe('integration flows', () => {
     expect(result.success).toBe(true);
     expect(visionProvider.calls[0]?.prompt).toContain('imported marketing image');
     expect(visionProvider.calls[0]?.promptMetadata.path).toContain('custom-analysis-prompt.txt');
+  });
+
+  it('searches generated and imported assets through the persisted library index', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const sourceDir = await createTempDir('imgbin-search-source-');
+    cleanupDirs.push(sourceDir);
+    const sourcePath = path.join(sourceDir, 'launch-hero.png');
+    await fs.writeFile(sourcePath, await createPngBuffer());
+
+    const metadataService = new MetadataService();
+    const searchIndexService = new SearchIndexService(metadataService);
+    const runner = new JobRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider: new FakeVisionProvider(),
+      assetWriter: new AssetWriter(),
+      metadataService,
+      thumbnailService: new ThumbnailService(),
+      promptSourceLoader: new PromptSourceLoader(),
+      managedAssetScanner: new ManagedAssetScanner(),
+      searchIndexService,
+      defaultAnalysisPromptPath,
+      thumbnailConfig: {
+        size: 64,
+        format: 'webp',
+        quality: 80
+      },
+      now: () => new Date('2026-03-10T00:00:00.000Z')
+    });
+    const searchService = new SearchService(searchIndexService);
+
+    const generated = await runner.generate({
+      prompt: 'orange dashboard hero',
+      output: dir,
+      tags: ['hero', 'dashboard'],
+      annotate: false,
+      thumbnail: false,
+      dryRun: false
+    });
+    const imported = await runner.annotate({
+      assetPath: sourcePath,
+      importTo: dir,
+      overwrite: false,
+      dryRun: false,
+      tags: ['launch']
+    });
+
+    expect(generated.success).toBe(true);
+    expect(imported.success).toBe(true);
+
+    const exact = await searchService.search({
+      library: dir,
+      query: 'orange hero',
+      mode: 'exact',
+      limit: 10,
+      output: 'json',
+      reindex: false
+    });
+
+    expect(exact.rebuilt).toBe(true);
+    expect(exact.results[0]?.slug).toContain('orange-dashboard-hero');
+    expect(exact.results[0]?.matchedFields).toContain('title');
+
+    const fuzzy = await searchService.search({
+      library: dir,
+      query: 'orng herp',
+      mode: 'fuzzy',
+      limit: 10,
+      output: 'json',
+      reindex: false
+    });
+
+    expect(fuzzy.rebuilt).toBe(false);
+    expect(fuzzy.results.some((item) => item.slug.includes('orange-dashboard-hero'))).toBe(true);
+    expect(fuzzy.indexedCount).toBeGreaterThanOrEqual(2);
   });
 });

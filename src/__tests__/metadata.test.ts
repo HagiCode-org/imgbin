@@ -93,4 +93,35 @@ describe('metadata merge rules', () => {
     expect(second.recognized?.overwriteApplied).toBe(true);
     expect(second.recognized?.promptPath).toBe('/tmp/custom-analysis-prompt.txt');
   });
+
+  it('derives stable search fields from metadata and provenance', () => {
+    const metadata = service.createInitialMetadata({
+      assetId: 'orange-dashboard-hero',
+      slug: 'orange-dashboard-hero',
+      assetDir: '/tmp/library/2026-03/orange-dashboard-hero',
+      originalFilename: 'original.png',
+      prompt: 'orange dashboard hero',
+      promptSource: {
+        type: 'docs-prompt-file',
+        path: '/tmp/prompts/hero.json',
+        context: 'marketing dashboard hero'
+      },
+      tags: ['hero', 'dashboard'],
+      createdAt: '2026-03-10T00:00:00.000Z',
+      source: {
+        type: 'imported',
+        originalPath: '/tmp/source/launch-hero.png'
+      }
+    });
+
+    const document = service.toSearchDocument(metadata);
+
+    expect(document.fields.title).toContain('Orange Dashboard Hero');
+    expect(document.fields.tags).toEqual(['hero', 'dashboard']);
+    expect(document.fields['generated.prompt']).toContain('orange dashboard hero');
+    expect(document.fields['generated.prompt']).toContain('marketing dashboard hero');
+    expect(document.fields['generated.promptSource.path']).toContain('/tmp/prompts/hero.json');
+    expect(document.fields['source.originalPath']).toContain('/tmp/source/launch-hero.png');
+    expect(document.searchText).toContain('orange dashboard hero');
+  });
 });
