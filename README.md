@@ -1,12 +1,12 @@
 # ImgBin
 
-ImgBin is a TypeScript CLI for generating image assets, writing searchable metadata, creating thumbnails, and enriching images with AI recognition.
+ImgBin is a TypeScript CLI for generating image assets, importing existing images into a managed library, writing searchable metadata, creating thumbnails, and running local Claude CLI image metadata analysis.
 
 ## Requirements
 
 - Node.js 20+
-- Access to an image generation HTTP API
-- Optional access to a vision recognition HTTP API
+- Access to an image generation HTTP API for `generate`
+- A local `claude` CLI installation for `annotate` / `--annotate`
 
 ## Installation
 
@@ -27,21 +27,67 @@ You can bootstrap local configuration from the checked-in example:
 cp .env.example .env
 ```
 
+## Usage guide
+
+### Quick start for the current HagiCode site workflow
+
+ImgBin now matches the Azure image-generation request format that was previously used in `repos/site/scripts/generate-image.sh`.
+
+That means the current recommended setup is:
+
+1. configure Azure image generation for output,
+2. configure a local metadata-analysis model for the Claude-compatible CLI step, and
+3. run `imgbin generate` directly or call it through the site wrapper.
+
+### Minimal `.env` example
+
+Put this in `repos/imgbin/.env`:
+
+```bash
+# Azure image generation
+IMGBIN_IMAGE_API_URL="https://<resource>.openai.azure.com/openai/deployments/<deployment>/images/generations?api-version=<version>"
+IMGBIN_IMAGE_API_KEY="<azure-api-key>"
+
+# Optional fallback names also supported by ImgBin
+# AZURE_ENDPOINT="https://<resource>.openai.azure.com/openai/deployments/<deployment>/images/generations?api-version=<version>"
+# AZURE_API_KEY="<azure-api-key>"
+
+# Metadata analysis model for the local Claude-compatible CLI
+IMGBIN_ANALYSIS_API_MODEL="glm-5"
+
+# Optional runtime tuning
+IMGBIN_DEFAULT_OUTPUT_DIR="./library"
+IMGBIN_IMAGE_API_TIMEOUT_MS="60000"
+```
+
+Notes:
+
+- `IMGBIN_IMAGE_API_URL` / `IMGBIN_IMAGE_API_KEY` are the preferred names.
+- `AZURE_ENDPOINT` / `AZURE_API_KEY` are accepted as compatibility fallbacks.
+- GPT Image is used only for image generation.
+- Metadata still comes from the local Claude-compatible analysis step.
+
 ## Environment Variables
 
 ### Image generation provider
 
-- `IMGBIN_IMAGE_API_URL`: required for `generate` and `batch` jobs that create new images
+- `IMGBIN_IMAGE_API_URL`: required for `generate` and batch jobs that create new images
 - `IMGBIN_IMAGE_API_KEY`: optional bearer token for the image API
 - `IMGBIN_IMAGE_API_MODEL`: optional model identifier stored in metadata
 - `IMGBIN_IMAGE_API_TIMEOUT_MS`: optional timeout override, defaults to `60000`
+- `AZURE_ENDPOINT`: compatibility fallback for `IMGBIN_IMAGE_API_URL`
+- `AZURE_API_KEY`: compatibility fallback for `IMGBIN_IMAGE_API_KEY`
 
-### Vision recognition provider
+### Local Claude CLI analysis
 
-- `IMGBIN_VISION_API_URL`: required for `annotate` or `--annotate`
-- `IMGBIN_VISION_API_KEY`: optional bearer token for the vision API
-- `IMGBIN_VISION_API_MODEL`: optional model identifier stored in metadata
-- `IMGBIN_VISION_API_TIMEOUT_MS`: optional timeout override, defaults to `60000`
+- `IMGBIN_ANALYSIS_CLI_PATH`: optional local Claude executable path; defaults to `claude`
+- `IMGBIN_ANALYSIS_API_MODEL`: preferred model identifier for ImgBin's local Claude analysis
+- `ANTHROPIC_MODEL`: fallback shared Claude model identifier used when `IMGBIN_ANALYSIS_API_MODEL` is not set
+- `IMGBIN_ANALYSIS_TIMEOUT_MS`: optional timeout override for the local Claude process, defaults to `60000`
+- `IMGBIN_ANALYSIS_PROMPT_PATH`: optional override for the bundled default prompt file
+
+If `IMGBIN_ANALYSIS_PROMPT_PATH` is not set, ImgBin falls back to `prompts/default-analysis-prompt.txt`.
+If `IMGBIN_ANALYSIS_API_MODEL` is empty, ImgBin falls back to `ANTHROPIC_MODEL`.
 
 ### General runtime
 
@@ -50,9 +96,25 @@ cp .env.example .env
 - `IMGBIN_THUMBNAIL_FORMAT`: optional thumbnail format, defaults to `webp`
 - `IMGBIN_THUMBNAIL_QUALITY`: optional thumbnail quality, defaults to `82`
 
-## Commands
+## Unified workflows
 
-### Generate an image asset
+### Generate one image with Azure + metadata analysis
+
+```bash
+imgbin generate \
+  --prompt "A cheerful hand-drawn hero illustration of an AI coding assistant helping a developer at a desk." \
+  --output ./library \
+  --annotate
+```
+
+What happens:
+
+1. ImgBin sends an Azure-style image request,
+2. writes the generated file into a managed asset directory,
+3. runs the local Claude-compatible metadata analysis step, and
+4. stores structured metadata in `metadata.json`.
+
+### Generate from raw prompt text
 
 ```bash
 imgbin generate \
@@ -64,16 +126,50 @@ imgbin generate \
   --thumbnail
 ```
 
-This creates a deterministic asset directory like `library/2026-03/orange-dashboard-hero/` containing:
+### Generate from a docs-style `prompt.json`
 
-- `original.<ext>`
-- `thumbnail.webp` when thumbnail generation is enabled
-- `metadata.json`
+```bash
+imgbin generate \
+  --prompt-file ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json \
+  --output ./library \
+  --annotate
+```
 
-### Annotate an existing asset
+ImgBin reads the docs prompt file, extracts `userPrompt`, carries over generation parameters into metadata, and records the prompt file path as prompt provenance.
+
+### Re-run metadata only
+
+If image generation already succeeded and you only want to refresh title/tags/description:
+
+```bash
+imgbin annotate ./library/2026-03/orange-dashboard-hero --overwrite
+```
+
+This is useful after changing `IMGBIN_ANALYSIS_API_MODEL` or updating the analysis prompt.
+
+### Annotate an existing managed asset
 
 ```bash
 imgbin annotate ./library/2026-03/orange-dashboard-hero
+```
+
+### Import a standalone image into the library, then analyze it
+
+```bash
+imgbin annotate ./incoming/launch-hero.png \
+  --import-to ./library \
+  --tag imported \
+  --thumbnail
+```
+
+This copies the source image into a new managed asset directory before writing `metadata.json`.
+
+### Re-run analysis with a custom analysis prompt
+
+```bash
+imgbin annotate ./library/2026-03/orange-dashboard-hero \
+  --analysis-prompt ./prompts/custom-analysis-prompt.txt \
+  --overwrite
 ```
 
 ### Generate or refresh a thumbnail
@@ -85,39 +181,94 @@ imgbin thumbnail ./library/2026-03/orange-dashboard-hero
 ### Run a batch manifest
 
 ```bash
-imgbin batch --manifest ./jobs/launch.yaml --output ./library --dry-run
+imgbin batch --manifest ./jobs/launch.yaml --output ./library
 ```
 
-Supported batch manifest shapes:
+### Batch-process assets whose analysis is still pending or failed
+
+```bash
+imgbin batch --pending-library ./library
+```
+
+## Batch manifest examples
 
 ```yaml
 jobs:
-  - prompt: orange dashboard hero for docs
-    slug: orange-dashboard-hero
-    tags: [dashboard, hero]
+  - promptFile: ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json
+    slug: docs-ai-assisted-coding
+    tags: [docs, hero]
     annotate: true
     thumbnail: true
+
+  - assetPath: ./incoming/marketing-card.png
+    importTo: ./library
+    tags: [marketing, imported]
+    thumbnail: true
+
   - assetPath: ./library/2026-03/existing-card
-    annotate: true
+    overwriteRecognition: true
+    analysisPromptPath: ./prompts/custom-analysis-prompt.txt
+
+  - pendingLibrary: ./library
 ```
 
 ## Metadata model
 
 Each asset directory stores a `metadata.json` file with these high-level sections:
 
-- `title` and `tags`: resolved fields used for search and display
-- `generated`: prompt and generation provider context
-- `recognized`: AI recognition suggestions
+- `source`: whether the asset was generated by ImgBin or imported from an external file
+- `generated`: prompt text, provider context, docs prompt provenance, and generation params
+- `recognized`: local Claude analysis suggestions plus prompt provenance
 - `manual`: human-maintained title, tags, or description that take precedence by default
 - `status`: per-step status for generation, recognition, and thumbnail creation
 - `paths`: relative file paths for original and thumbnail assets
 - `timestamps`: creation and update timestamps
 
-Manual fields always win over AI suggestions unless your workflow edits them directly. Recognition updates refresh the `recognized` block and recalculate resolved `title` / `tags` without deleting manual values.
+Manual fields always win over AI suggestions unless you run an explicit overwrite flow. Recognition failures keep the asset on disk and mark the asset as retryable for later batch processing.
+
+### Important payload note
+
+ImgBin does not persist large image base64 blobs such as Azure `b64_json` into `metadata.json`.
+The actual generated image is stored as the asset file on disk, while metadata keeps only the structured fields and lightweight provider details needed for diagnostics.
+
+## Notes on analysis behavior
+
+ImgBin does not call a remote Claude URL for metadata analysis. Instead, it:
+
+1. loads the bundled or overridden analysis prompt,
+2. passes the selected model to the local `claude` CLI,
+3. asks Claude to inspect the local image file directly from disk, and
+4. parses the returned JSON into metadata fields.
+
+That means the only required Claude-side runtime setting is a usable model name plus a working local `claude` command.
+
+## Notes on image provider requests
+
+The built-in provider is now optimized for the Azure image-generation request format previously used by the site workflow.
+
+### Current Azure-style request body
+
+```json
+{
+  "prompt": "orange dashboard hero for docs",
+  "size": "1024x1024",
+  "quality": "high",
+  "output_compression": 100,
+  "output_format": "png",
+  "n": 1
+}
+```
+
+### Supported response shapes
+
+1. Azure JSON with `data[0].b64_json`
+2. Raw image bytes (`Content-Type: image/png`, etc.)
+3. JSON with `imageBase64`
+4. JSON with `imageUrl`
 
 ## Repository hygiene
 
-This repository starts from scratch, so local build outputs and generated asset libraries are ignored by default:
+This repository ignores local build outputs and generated asset libraries by default:
 
 - `dist/`
 - `node_modules/`
@@ -126,46 +277,6 @@ This repository starts from scratch, so local build outputs and generated asset 
 - temporary test output directories such as `.tmp/` and `.vitest-temp/`
 
 If you want to commit sample assets, place them outside ignored runtime directories and document them explicitly.
-
-## Notes on HTTP providers
-
-The built-in HTTP providers use simple JSON contracts:
-
-### Image generation request
-
-```json
-{
-  "prompt": "orange dashboard hero for docs",
-  "model": "my-image-model",
-  "tags": ["dashboard", "hero"]
-}
-```
-
-Supported image generation responses:
-
-1. Raw image bytes (`Content-Type: image/png`, etc.)
-2. JSON with `imageBase64`
-3. JSON with `imageUrl`
-
-### Vision recognition request
-
-```json
-{
-  "imageBase64": "...",
-  "mimeType": "image/png",
-  "model": "my-vision-model"
-}
-```
-
-Expected vision recognition response:
-
-```json
-{
-  "title": "Orange analytics hero",
-  "tags": ["dashboard", "orange", "saas"],
-  "description": "A bright analytics dashboard for a landing page."
-}
-```
 
 ## Development workflow
 
