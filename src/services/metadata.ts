@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import type { AssetMetadata, VisionRecognitionResult } from '../types.js';
+import type { AnalysisPromptMetadata, AssetMetadata, ProcessingState, PromptSourceMetadata, VisionRecognitionResult } from '../types.js';
 import { titleFromSlug } from '../lib/slug.js';
 
 export interface CreateMetadataInput {
@@ -9,11 +9,17 @@ export interface CreateMetadataInput {
   assetDir: string;
   originalFilename: string;
   prompt?: string;
+  promptSource?: PromptSourceMetadata;
+  generationParams?: Record<string, unknown>;
   title?: string;
   tags?: string[];
   generatedProvider?: string;
   generatedModel?: string;
   createdAt: string;
+  generationState?: ProcessingState;
+  recognitionState?: ProcessingState;
+  thumbnailState?: ProcessingState;
+  source?: AssetMetadata['source'];
   providerPayload?: AssetMetadata['providerPayload'];
 }
 
@@ -23,11 +29,12 @@ export class MetadataService {
     const tags = dedupeStrings(input.tags ?? []);
 
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       assetId: input.assetId,
       slug: input.slug,
       title: resolvedTitle,
       tags,
+      source: input.source ?? { type: 'generated' },
       paths: {
         assetDir: input.assetDir,
         original: input.originalFilename
@@ -37,12 +44,14 @@ export class MetadataService {
         provider: input.generatedProvider,
         model: input.generatedModel,
         tags,
-        title: resolvedTitle
+        title: resolvedTitle,
+        promptSource: input.promptSource,
+        generationParams: input.generationParams
       },
       status: {
-        generation: 'succeeded',
-        recognition: 'pending',
-        thumbnail: 'pending'
+        generation: input.generationState ?? 'succeeded',
+        recognition: input.recognitionState ?? 'pending',
+        thumbnail: input.thumbnailState ?? 'pending'
       },
       providerPayload: input.providerPayload,
       timestamps: {
@@ -56,7 +65,8 @@ export class MetadataService {
     metadata: AssetMetadata,
     recognition: VisionRecognitionResult,
     nowIso: string,
-    overwrite: boolean
+    overwrite: boolean,
+    promptMetadata: AnalysisPromptMetadata
   ): AssetMetadata {
     const nextRecognized = overwrite
       ? {
@@ -66,16 +76,24 @@ export class MetadataService {
           provider: recognition.provider,
           model: recognition.model,
           updatedAt: nowIso,
-          overwriteApplied: true
+          overwriteApplied: true,
+          promptId: promptMetadata.id,
+          promptPath: promptMetadata.path,
+          promptSourceType: promptMetadata.type,
+          lastError: undefined
         }
       : {
           title: metadata.recognized?.title ?? recognition.title,
           tags: metadata.recognized?.tags?.length ? metadata.recognized.tags : dedupeStrings(recognition.tags ?? []),
           description: metadata.recognized?.description ?? recognition.description,
-          provider: metadata.recognized?.provider ?? recognition.provider,
-          model: metadata.recognized?.model ?? recognition.model,
+          provider: recognition.provider,
+          model: recognition.model,
           updatedAt: nowIso,
-          overwriteApplied: false
+          overwriteApplied: false,
+          promptId: promptMetadata.id,
+          promptPath: promptMetadata.path,
+          promptSourceType: promptMetadata.type,
+          lastError: undefined
         };
 
     const next: AssetMetadata = {
@@ -83,6 +101,7 @@ export class MetadataService {
       recognized: nextRecognized,
       providerPayload: {
         ...metadata.providerPayload,
+        analysis: recognition.raw,
         vision: recognition.raw
       },
       status: {
@@ -98,9 +117,22 @@ export class MetadataService {
     return this.resolvePresentationFields(next);
   }
 
-  public markRecognitionFailure(metadata: AssetMetadata, nowIso: string, error: string): AssetMetadata {
+  public markRecognitionFailure(
+    metadata: AssetMetadata,
+    nowIso: string,
+    error: string,
+    promptMetadata?: AnalysisPromptMetadata
+  ): AssetMetadata {
     return {
       ...metadata,
+      recognized: {
+        ...metadata.recognized,
+        promptId: promptMetadata?.id ?? metadata.recognized?.promptId,
+        promptPath: promptMetadata?.path ?? metadata.recognized?.promptPath,
+        promptSourceType: promptMetadata?.type ?? metadata.recognized?.promptSourceType,
+        lastError: error,
+        updatedAt: nowIso
+      },
       extra: {
         ...metadata.extra,
         lastRecognitionError: error

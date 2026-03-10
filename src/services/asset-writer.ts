@@ -7,12 +7,13 @@ export interface CreateAssetDirectoryInput {
   outputRoot: string;
   slug?: string;
   prompt?: string;
+  sourcePath?: string;
   now: Date;
 }
 
 export class AssetWriter {
   public async createAssetDirectory(input: CreateAssetDirectoryInput): Promise<{ assetDir: string; slug: string; assetId: string }> {
-    const slug = slugify(input.slug ?? input.prompt ?? 'asset');
+    const slug = slugify(input.slug ?? input.prompt ?? basenameWithoutExtension(input.sourcePath) ?? 'asset');
     const assetDir = await resolveUniqueAssetDir(input.outputRoot, slug, input.now);
     await ensureDir(assetDir);
     return {
@@ -29,9 +30,25 @@ export class AssetWriter {
     return filename;
   }
 
+  public async importOriginalAsset(assetDir: string, sourcePath: string): Promise<string> {
+    const resolvedSource = path.resolve(sourcePath);
+    const extension = path.extname(resolvedSource).replace(/^\./, '').toLowerCase() || 'bin';
+    const filename = `original.${extension}`;
+    await fs.copyFile(resolvedSource, path.join(assetDir, filename));
+    return filename;
+  }
+
   public async readOriginalAsset(assetDir: string, originalFilename: string): Promise<Buffer> {
     return fs.readFile(path.join(assetDir, originalFilename));
   }
+}
+
+function basenameWithoutExtension(sourcePath?: string): string | undefined {
+  if (!sourcePath) {
+    return undefined;
+  }
+
+  return path.basename(sourcePath, path.extname(sourcePath));
 }
 
 function extensionFromMimeType(mimeType: string): string {
