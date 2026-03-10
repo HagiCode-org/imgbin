@@ -27,6 +27,38 @@ You can bootstrap local configuration from the checked-in example:
 cp .env.example .env
 ```
 
+## Release automation
+
+ImgBin includes a GitHub Actions based npm publishing flow for both prerelease and stable channels.
+
+### Publishing channels
+
+- Pushes to `main` publish a unique prerelease build to the npm `dev` dist-tag.
+- Stable releases publish only from Git tags in the `vX.Y.Z` format and target the npm `latest` dist-tag.
+- The stable release workflow fails if the Git tag version does not exactly match `repos/imgbin/package.json`.
+
+### Trusted publishing prerequisites
+
+Before the workflows can publish successfully:
+
+1. configure npm trusted publishing for the `HagiCode-org/imgbin` GitHub repository,
+2. ensure the publishing package owner has access to the `@hagicode/imgbin` package on npm, and
+3. keep GitHub Actions enabled for the repository.
+
+The workflows are designed to publish with GitHub OIDC identity and provenance, not a long-lived `NPM_TOKEN`.
+
+### Local release verification
+
+Before pushing a release tag, run the same checks used by CI:
+
+```bash
+npm run build
+npm test
+npm run pack:check
+```
+
+For a stable release, update `package.json` to the target version first and then push a matching tag such as `v0.1.0`.
+
 ## Usage guide
 
 ### Quick start for the current HagiCode site workflow

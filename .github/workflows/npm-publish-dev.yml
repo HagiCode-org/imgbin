@@ -1,0 +1,65 @@
+name: Publish npm dev
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-dev:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: repos/imgbin
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: repos/imgbin/package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Prepare dev version
+        id: version
+        run: |
+          version="$(npm run --silent publish:prepare-dev-version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Prepared dev version: $version"
+
+      - name: Verify packed files
+        run: npm run pack:check
+
+      - name: Publish to npm dev dist-tag
+        run: npm publish --tag dev --provenance --access public
+
+      - name: Summarize publish result
+        run: |
+          {
+            echo "## npm dev publish"
+            echo
+            echo "- Version: ${{ steps.version.outputs.version }}"
+            echo "- Dist-tag: dev"
+            echo "- Registry: npmjs.org"
+          } >> "$GITHUB_STEP_SUMMARY"
