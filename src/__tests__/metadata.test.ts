@@ -30,13 +30,19 @@ describe('metadata merge rules', () => {
         provider: 'fake-provider'
       },
       '2026-03-10T00:00:01.000Z',
-      false
+      false,
+      {
+        id: 'default-analysis-prompt.txt',
+        path: '/tmp/default-analysis-prompt.txt',
+        type: 'default'
+      }
     );
 
     expect(merged.title).toBe('Manual Hero Title');
     expect(merged.tags).toEqual(['manual-tag']);
     expect(merged.recognized?.title).toBe('Recognized Hero Title');
     expect(merged.recognized?.tags).toEqual(['recognized-tag']);
+    expect(merged.recognized?.promptId).toBe('default-analysis-prompt.txt');
   });
 
   it('overwrites recognized fields when overwrite is enabled', () => {
@@ -58,7 +64,12 @@ describe('metadata merge rules', () => {
         provider: 'fake-provider'
       },
       '2026-03-10T00:00:01.000Z',
-      false
+      false,
+      {
+        id: 'default-analysis-prompt.txt',
+        path: '/tmp/default-analysis-prompt.txt',
+        type: 'default'
+      }
     );
 
     const second = service.applyRecognition(
@@ -69,11 +80,17 @@ describe('metadata merge rules', () => {
         provider: 'fake-provider'
       },
       '2026-03-10T00:00:02.000Z',
-      true
+      true,
+      {
+        id: 'custom-analysis-prompt.txt',
+        path: '/tmp/custom-analysis-prompt.txt',
+        type: 'file'
+      }
     );
 
     expect(second.recognized?.title).toBe('New Recognition');
     expect(second.recognized?.tags).toEqual(['new-tag']);
     expect(second.recognized?.overwriteApplied).toBe(true);
+    expect(second.recognized?.promptPath).toBe('/tmp/custom-analysis-prompt.txt');
   });
 });

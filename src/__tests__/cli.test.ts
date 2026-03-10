@@ -7,6 +7,7 @@ function createRuntimeStub(): CliRuntime {
     cwd: process.cwd(),
     config: {
       outputDir: '/tmp/library',
+      analysisPromptPath: '/tmp/default-analysis-prompt.txt',
       thumbnail: {
         size: 512,
         format: 'webp',
@@ -23,9 +24,9 @@ function createRuntimeStub(): CliRuntime {
       load: vi.fn(async () => ({ jobs: [] }))
     },
     jobRunner: {
-      generate: vi.fn(async () => ({ success: true, message: 'generated' })),
-      annotate: vi.fn(async () => ({ success: true, message: 'annotated' })),
-      thumbnail: vi.fn(async () => ({ success: true, message: 'thumbnailed' })),
+      generate: vi.fn(async () => ({ success: true, message: 'generated', steps: [] })),
+      annotate: vi.fn(async () => ({ success: true, message: 'annotated', steps: [] })),
+      thumbnail: vi.fn(async () => ({ success: true, message: 'thumbnailed', steps: [] })),
       batch: vi.fn(async () => ({ success: true, total: 0, succeeded: 0, failed: 0, results: [] }))
     }
   } as unknown as CliRuntime;
@@ -40,8 +41,8 @@ describe('CLI parsing', () => {
       'node',
       'imgbin',
       'generate',
-      '--prompt',
-      'orange dashboard',
+      '--prompt-file',
+      './prompt.json',
       '--output',
       './out',
       '--slug',
@@ -51,18 +52,22 @@ describe('CLI parsing', () => {
       '--tag',
       'hero',
       '--annotate',
-      '--thumbnail'
+      '--thumbnail',
+      '--analysis-prompt',
+      './analysis.txt'
     ]);
 
     expect(runtime.jobRunner.generate).toHaveBeenCalledWith({
-      prompt: 'orange dashboard',
+      prompt: undefined,
+      promptFile: './prompt.json',
       output: './out',
       slug: 'orange-dashboard',
       title: undefined,
       tags: ['dashboard', 'hero'],
       annotate: true,
       thumbnail: true,
-      dryRun: false
+      dryRun: false,
+      analysisPromptPath: './analysis.txt'
     });
   });
 

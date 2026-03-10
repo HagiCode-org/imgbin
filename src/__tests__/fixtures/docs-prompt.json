@@ -1,0 +1,16 @@
+{
+  "_comment": "Image generation prompt configuration",
+  "basePrompt": "Warm classroom illustration style.",
+  "context": "docs-hero",
+  "customPrompt": "Use playful note-card shapes.",
+  "userPrompt": "A warm classroom-style dashboard hero illustration with playful note-card shapes.",
+  "generationParams": {
+    "size": "1024x1024",
+    "quality": "high",
+    "format": "png"
+  },
+  "_metadata": {
+    "generatedAt": "2026-03-10T00:00:00.000Z",
+    "version": "1.0.0"
+  }
+}

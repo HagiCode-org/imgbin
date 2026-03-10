@@ -24,15 +24,23 @@ export class FakeImageProvider implements ImageGenerationProvider {
       mimeType: 'image/png',
       provider: 'fake-image-provider',
       model: input.model ?? 'fake-image-model',
-      raw: { prompt: input.prompt }
+      raw: {
+        prompt: input.prompt,
+        generationParams: input.generationParams,
+        promptSource: input.promptSource
+      }
     };
   }
 }
 
 export class FakeVisionProvider implements VisionRecognitionProvider {
+  public readonly calls: VisionRecognitionRequest[] = [];
+
   public constructor(private readonly options: { shouldFail?: boolean } = {}) {}
 
-  public async recognizeImage(_input: VisionRecognitionRequest): Promise<VisionRecognitionResult> {
+  public async recognizeImage(input: VisionRecognitionRequest): Promise<VisionRecognitionResult> {
+    this.calls.push(input);
+
     if (this.options.shouldFail) {
       throw new Error('Synthetic vision failure');
     }
@@ -41,9 +49,9 @@ export class FakeVisionProvider implements VisionRecognitionProvider {
       title: 'Recognized Sunset Panel',
       tags: ['sunset', 'panel', 'ui'],
       description: 'A warm interface composition.',
-      provider: 'fake-vision-provider',
-      model: 'fake-vision-model',
-      raw: { ok: true }
+      provider: 'local-claude-cli',
+      model: input.model ?? 'fake-vision-model',
+      raw: { ok: true, promptId: input.promptMetadata.id, filePath: input.filePath }
     };
   }
 }
