@@ -1,9 +1,38 @@
 export type ProcessingState = 'pending' | 'succeeded' | 'failed' | 'skipped';
+export type CommandStepName = 'normalize' | 'generate' | 'import' | 'recognition' | 'thumbnail' | 'scan';
+
+export interface PromptSourceMetadata {
+  type: 'raw' | 'docs-prompt-file';
+  path?: string;
+  context?: string;
+  generationParams?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AnalysisPromptMetadata {
+  type: 'default' | 'file';
+  id: string;
+  path: string;
+}
+
+export interface LoadedAnalysisPrompt {
+  text: string;
+  metadata: AnalysisPromptMetadata;
+}
+
+export interface NormalizedGenerationInput {
+  prompt: string;
+  tags: string[];
+  promptSource: PromptSourceMetadata;
+  generationParams?: Record<string, unknown>;
+}
 
 export interface ImageGenerationRequest {
   prompt: string;
   model?: string;
   tags?: string[];
+  generationParams?: Record<string, unknown>;
+  promptSource?: PromptSourceMetadata;
 }
 
 export interface ImageGenerationResult {
@@ -19,6 +48,9 @@ export interface VisionRecognitionRequest {
   buffer: Buffer;
   mimeType: string;
   model?: string;
+  prompt: string;
+  promptMetadata: AnalysisPromptMetadata;
+  filePath: string;
 }
 
 export interface VisionRecognitionResult {
@@ -31,12 +63,17 @@ export interface VisionRecognitionResult {
 }
 
 export interface AssetMetadata {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   assetId: string;
   slug: string;
   title: string;
   tags: string[];
   description?: string;
+  source?: {
+    type: 'generated' | 'imported';
+    originalPath?: string;
+    importedAt?: string;
+  };
   paths: {
     assetDir: string;
     original: string;
@@ -48,6 +85,8 @@ export interface AssetMetadata {
     model?: string;
     tags?: string[];
     title?: string;
+    promptSource?: PromptSourceMetadata;
+    generationParams?: Record<string, unknown>;
   };
   recognized?: {
     title?: string;
@@ -57,6 +96,10 @@ export interface AssetMetadata {
     model?: string;
     updatedAt?: string;
     overwriteApplied?: boolean;
+    promptId?: string;
+    promptPath?: string;
+    promptSourceType?: AnalysisPromptMetadata['type'];
+    lastError?: string;
   };
   manual?: {
     title?: string;
@@ -71,6 +114,7 @@ export interface AssetMetadata {
   providerPayload?: {
     image?: unknown;
     vision?: unknown;
+    analysis?: unknown;
   };
   timestamps: {
     createdAt: string;
@@ -81,6 +125,7 @@ export interface AssetMetadata {
 
 export interface BatchJobDefinition {
   prompt?: string;
+  promptFile?: string;
   slug?: string;
   output?: string;
   title?: string;
@@ -88,7 +133,10 @@ export interface BatchJobDefinition {
   annotate?: boolean;
   thumbnail?: boolean;
   assetPath?: string;
+  importTo?: string;
   overwriteRecognition?: boolean;
+  analysisPromptPath?: string;
+  pendingLibrary?: string;
 }
 
 export interface BatchManifest {
@@ -96,7 +144,8 @@ export interface BatchManifest {
 }
 
 export interface GenerateCommandInput {
-  prompt: string;
+  prompt?: string;
+  promptFile?: string;
   output: string;
   slug?: string;
   title?: string;
@@ -104,12 +153,19 @@ export interface GenerateCommandInput {
   annotate: boolean;
   thumbnail: boolean;
   dryRun: boolean;
+  analysisPromptPath?: string;
 }
 
 export interface AnnotateCommandInput {
   assetPath: string;
   overwrite: boolean;
   dryRun: boolean;
+  importTo?: string;
+  analysisPromptPath?: string;
+  slug?: string;
+  title?: string;
+  tags?: string[];
+  thumbnail?: boolean;
 }
 
 export interface ThumbnailCommandInput {
@@ -118,9 +174,17 @@ export interface ThumbnailCommandInput {
 }
 
 export interface BatchCommandInput {
-  manifestPath: string;
+  manifestPath?: string;
+  pendingLibrary?: string;
   output?: string;
   dryRun: boolean;
+}
+
+export interface CommandStepResult {
+  step: CommandStepName;
+  status: Exclude<ProcessingState, 'pending'>;
+  message: string;
+  error?: string;
 }
 
 export interface CommandResult {
@@ -129,6 +193,8 @@ export interface CommandResult {
   assetDir?: string;
   metadataPath?: string;
   error?: string;
+  warnings?: string[];
+  steps?: CommandStepResult[];
 }
 
 export interface BatchCommandResult {

@@ -2,11 +2,13 @@ import path from 'node:path';
 import { loadConfig, type AppConfig } from './config.js';
 import { createLogger, type Logger } from './logger.js';
 import { requireImageProviderConfig, HttpImageGenerationProvider } from '../providers/image-api-provider.js';
-import { requireVisionProviderConfig, HttpVisionRecognitionProvider } from '../providers/vision-api-provider.js';
+import { ClaudeMetadataProvider } from '../providers/claude-metadata-provider.js';
 import { AssetWriter } from '../services/asset-writer.js';
 import { JobRunner } from '../services/job-runner.js';
+import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
 import { ManifestLoader } from '../services/manifest-loader.js';
 import { MetadataService } from '../services/metadata.js';
+import { PromptSourceLoader } from '../services/prompt-source-loader.js';
 import { ThumbnailService } from '../services/thumbnail.js';
 import type { ImageGenerationProvider, VisionRecognitionProvider } from '../types.js';
 
@@ -33,9 +35,11 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
   const assetWriter = new AssetWriter();
   const metadataService = new MetadataService();
   const thumbnailService = new ThumbnailService();
+  const promptSourceLoader = new PromptSourceLoader();
+  const managedAssetScanner = new ManagedAssetScanner();
 
   const imageProvider = options.imageProvider ?? (config.imageApi ? new HttpImageGenerationProvider(requireImageProviderConfig(config.imageApi)) : undefined);
-  const visionProvider = options.visionProvider ?? (config.visionApi ? new HttpVisionRecognitionProvider(requireVisionProviderConfig(config.visionApi)) : undefined);
+  const visionProvider = options.visionProvider ?? new ClaudeMetadataProvider(config.analysisCli);
 
   return {
     cwd,
@@ -51,6 +55,9 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
       assetWriter,
       metadataService,
       thumbnailService,
+      promptSourceLoader,
+      managedAssetScanner,
+      defaultAnalysisPromptPath: config.analysisPromptPath,
       thumbnailConfig: config.thumbnail,
       now: () => new Date()
     })

@@ -1,14 +1,24 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import {
+  analysisCliConfigSchema,
   imageProviderConfigSchema,
-  thumbnailConfigSchema,
-  visionProviderConfigSchema
+  thumbnailConfigSchema
 } from './schema.js';
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_ANALYSIS_PROMPT_PATH = path.resolve(moduleDir, '../../prompts/default-analysis-prompt.txt');
 
 export interface ProviderRuntimeConfig {
   url: string;
   apiKey?: string;
+  model?: string;
+  timeoutMs: number;
+}
+
+export interface AnalysisCliRuntimeConfig {
+  executable: string;
   model?: string;
   timeoutMs: number;
 }
@@ -21,7 +31,8 @@ export interface AppConfig {
     quality: number;
   };
   imageApi?: ProviderRuntimeConfig;
-  visionApi?: ProviderRuntimeConfig;
+  analysisCli: AnalysisCliRuntimeConfig;
+  analysisPromptPath: string;
 }
 
 export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -37,19 +48,18 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): A
     outputDir: env.IMGBIN_DEFAULT_OUTPUT_DIR ?? './library',
     thumbnail,
     imageApi: parseProviderConfig(
-      env.IMGBIN_IMAGE_API_URL,
-      env.IMGBIN_IMAGE_API_KEY,
+      env.IMGBIN_IMAGE_API_URL ?? env.AZURE_ENDPOINT,
+      env.IMGBIN_IMAGE_API_KEY ?? env.AZURE_API_KEY,
       env.IMGBIN_IMAGE_API_MODEL,
       env.IMGBIN_IMAGE_API_TIMEOUT_MS,
       imageProviderConfigSchema
     ),
-    visionApi: parseProviderConfig(
-      env.IMGBIN_VISION_API_URL,
-      env.IMGBIN_VISION_API_KEY,
-      env.IMGBIN_VISION_API_MODEL,
-      env.IMGBIN_VISION_API_TIMEOUT_MS,
-      visionProviderConfigSchema
-    )
+    analysisCli: analysisCliConfigSchema.parse({
+      executable: env.IMGBIN_ANALYSIS_CLI_PATH ?? 'claude',
+      model: env.IMGBIN_ANALYSIS_API_MODEL ?? env.ANTHROPIC_MODEL ?? env.IMGBIN_VISION_API_MODEL,
+      timeoutMs: parseNumber(env.IMGBIN_ANALYSIS_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_API_TIMEOUT_MS, 60000)
+    }),
+    analysisPromptPath: resolveConfigPath(cwd, env.IMGBIN_ANALYSIS_PROMPT_PATH, DEFAULT_ANALYSIS_PROMPT_PATH)
   };
 }
 
@@ -58,7 +68,7 @@ function parseProviderConfig(
   apiKey: string | undefined,
   model: string | undefined,
   timeoutMsRaw: string | undefined,
-  schema: typeof imageProviderConfigSchema | typeof visionProviderConfigSchema
+  schema: typeof imageProviderConfigSchema
 ): ProviderRuntimeConfig | undefined {
   if (!url) {
     return undefined;
@@ -70,6 +80,14 @@ function parseProviderConfig(
     model,
     timeoutMs: parseNumber(timeoutMsRaw, 60000)
   });
+}
+
+function resolveConfigPath(cwd: string, candidate: string | undefined, fallback: string): string {
+  if (!candidate) {
+    return fallback;
+  }
+
+  return path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
 }
 
 function parseNumber(value: string | undefined, fallback: number): number {
