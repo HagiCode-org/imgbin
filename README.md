@@ -29,13 +29,26 @@ cp .env.example .env
 
 ## Release automation
 
-ImgBin includes a GitHub Actions based npm publishing workflow for both prerelease and stable channels.
+ImgBin includes a GitHub Actions based npm publishing workflow for both prerelease and stable channels, plus a GitHub Release Drafter workflow that keeps the next stable release in draft form.
 
 ### Publishing channels
 
 - Pushes to `main` publish a unique prerelease build to the npm `dev` dist-tag.
-- Stable releases publish only from Git tags in the `vX.Y.Z` format and target the npm `latest` dist-tag.
-- The stable release workflow fails if the Git tag version does not exactly match `package.json`.
+- Pushes to `main` also refresh the GitHub draft release notes through Release Drafter.
+- Stable releases publish only when a GitHub draft release for tag `vX.Y.Z` is published and target the npm `latest` dist-tag.
+- The stable release workflow fails if the release tag version does not exactly match `package.json`.
+
+### Release draft flow
+
+ImgBin now mirrors the Release Drafter pattern already used in `repos/hagicode-desktop`.
+
+1. Merge PRs into `main` with the appropriate release labels (`major`, `minor`, `patch`, `feature`, `bug`, `docs`, and related categories).
+2. Let `repos/imgbin/.github/workflows/release-drafter.yml` refresh the draft release notes in GitHub Releases.
+3. Review the draft release in the GitHub UI.
+4. If the release is not ready, continue merging fixes or delete the draft release directly in GitHub.
+5. When ready, publish the draft release in GitHub. That `release.published` event triggers the stable npm `latest` publish workflow.
+
+Release Drafter manages the draft notes only. Draft review, delete, and publish remain native GitHub Release operations; ImgBin intentionally does not add a custom draft lifecycle script on top.
 
 ### Trusted publishing prerequisites
 
@@ -50,7 +63,7 @@ Keep the trusted publisher configuration pointed at the repository's single publ
 
 ### Local release verification
 
-Before pushing a release tag, run the same checks used by CI:
+Before publishing a stable draft release, run the same checks used by CI:
 
 ```bash
 npm run build
@@ -58,7 +71,20 @@ npm test
 npm run pack:check
 ```
 
-For a stable release, update `package.json` to the target version first and then push a matching tag such as `v0.1.0`.
+For a stable release:
+
+1. update `package.json` to the target stable version,
+2. make sure the Release Drafter draft uses the matching tag such as `v0.1.0`, and
+3. publish that draft release from the GitHub UI.
+
+The stable publish workflow checks out the published release tag and validates that it still matches `package.json` before running `npm publish --tag latest`.
+
+### Troubleshooting release drafts
+
+- If the draft notes are empty or mis-categorized, check the merged PR labels against `repos/imgbin/.github/release-drafter.yml`.
+- If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish-dev.yml` for the `release.published` run.
+- If the workflow reports a version mismatch, compare the published release tag with `package.json` and rerun after correcting the version source of truth.
+- If you need to discard a pending stable release, delete the draft release in GitHub before publishing it.
 
 ## Usage guide
 
