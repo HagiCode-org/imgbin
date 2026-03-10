@@ -4,7 +4,26 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const tagName = process.argv[2] ?? process.env.GITHUB_REF_NAME;
+function getTagName() {
+  const explicitTag = process.argv[2] ?? process.env.RELEASE_TAG_NAME ?? process.env.GITHUB_REF_NAME;
+  if (explicitTag) {
+    return explicitTag;
+  }
+
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath || !fs.existsSync(eventPath)) {
+    return undefined;
+  }
+
+  try {
+    const eventPayload = JSON.parse(fs.readFileSync(eventPath, "utf8"));
+    return eventPayload?.release?.tag_name;
+  } catch {
+    return undefined;
+  }
+}
+
+const tagName = getTagName();
 
 if (!tagName) {
   throw new Error("Missing release tag. Pass a tag name or set GITHUB_REF_NAME.");
