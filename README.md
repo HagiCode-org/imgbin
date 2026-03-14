@@ -148,6 +148,8 @@ Notes:
 If `IMGBIN_ANALYSIS_PROMPT_PATH` is not set, ImgBin falls back to `prompts/default-analysis-prompt.txt`.
 If `IMGBIN_ANALYSIS_API_MODEL` is empty, ImgBin falls back to `ANTHROPIC_MODEL`.
 
+ImgBin also adds a runtime filename-guidance block to every Claude analysis request. Imported assets prefer the original source filename, generated assets fall back to the managed slug, and placeholder names such as `original.png` or `asset` are ignored. The filename is treated as a soft scene hint only; visible image evidence still wins when they disagree.
+
 ### General runtime
 
 - `IMGBIN_DEFAULT_OUTPUT_DIR`: optional default output root, defaults to `./library`
@@ -205,6 +207,16 @@ imgbin annotate ./library/2026-03/orange-dashboard-hero --overwrite
 ```
 
 This is useful after changing `IMGBIN_ANALYSIS_API_MODEL` or updating the analysis prompt.
+
+### Filename-guided analysis
+
+ImgBin now enriches Claude metadata analysis with a lightweight filename hint:
+
+- imported assets prefer the source filename from `source.originalPath`,
+- generated assets fall back to the managed asset slug or directory name, and
+- placeholder names such as `original.jpg` or `asset` are skipped automatically.
+
+This guidance is appended at runtime, so it applies to both the bundled default prompt and any `--analysis-prompt` override. Treat it as a soft hint: if the filename conflicts with the image itself, the visible image content should take precedence.
 
 ### Annotate an existing managed asset
 

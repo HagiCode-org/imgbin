@@ -11,3 +11,5 @@ library/
 .env.*
 !.env.example
 *.tsbuildinfo
+
+temp/

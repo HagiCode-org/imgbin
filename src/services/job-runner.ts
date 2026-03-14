@@ -8,6 +8,7 @@ import type {
   BatchJobDefinition,
   CommandResult,
   CommandStepResult,
+  FilenameHintSource,
   GenerateCommandInput,
   ImageGenerationProvider,
   ThumbnailCommandInput,
@@ -350,13 +351,16 @@ export class JobRunner {
       loadedPrompt = await this.deps.promptSourceLoader.loadAnalysisPrompt(this.deps.defaultAnalysisPromptPath, analysisPromptPath);
       const originalPath = path.join(assetDir, metadata.paths.original);
       const buffer = await fs.readFile(originalPath);
+      const filenameHint = this.deriveFilenameHint(assetDir, metadata);
       const recognition = await this.deps.visionProvider.recognizeImage({
         buffer,
         mimeType: mimeTypeFromFilename(originalPath),
         model: metadata.recognized?.model,
         prompt: loadedPrompt.text,
         promptMetadata: loadedPrompt.metadata,
-        filePath: originalPath
+        filePath: originalPath,
+        filenameHint: filenameHint?.text,
+        filenameHintSource: filenameHint?.source
       });
       return {
         metadata: this.deps.metadataService.applyRecognition(metadata, recognition, this.deps.now().toISOString(), overwrite, loadedPrompt.metadata),
@@ -464,6 +468,34 @@ export class JobRunner {
       // Search index sync is best-effort; the search command can rebuild lazily later.
     }
   }
+
+  private deriveFilenameHint(assetDir: string, metadata: AssetMetadata): { text: string; source: FilenameHintSource } | undefined {
+    const sourceOriginalPath = metadata.source?.originalPath;
+    const sourceFilename = sourceOriginalPath ? path.basename(sourceOriginalPath) : undefined;
+    if (isDescriptiveFilenameCandidate(sourceFilename)) {
+      return {
+        text: sourceFilename!,
+        source: 'source.originalPath'
+      };
+    }
+
+    if (isDescriptiveFilenameCandidate(metadata.slug)) {
+      return {
+        text: metadata.slug,
+        source: 'slug'
+      };
+    }
+
+    const assetDirName = path.basename(assetDir);
+    if (isDescriptiveFilenameCandidate(assetDirName)) {
+      return {
+        text: assetDirName,
+        source: 'assetDir'
+      };
+    }
+
+    return undefined;
+  }
 }
 
 function mimeTypeFromFilename(filename: string): string {
@@ -480,4 +512,23 @@ function mimeTypeFromFilename(filename: string): string {
     return 'image/gif';
   }
   return 'application/octet-stream';
+}
+
+function isDescriptiveFilenameCandidate(candidate?: string): boolean {
+  if (!candidate) {
+    return false;
+  }
+
+  const trimmed = candidate.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const parsed = path.parse(trimmed);
+  const normalizedStem = normalizeFilenameStem(parsed.name || trimmed);
+  return normalizedStem !== '' && !/^(original|asset)\d*$/.test(normalizedStem);
+}
+
+function normalizeFilenameStem(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 }

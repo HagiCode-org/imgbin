@@ -15,7 +15,7 @@ export class ClaudeMetadataProvider implements VisionRecognitionProvider {
       );
     }
 
-    const prompt = buildClaudePrompt(input.prompt, input.filePath);
+    const prompt = buildClaudePrompt(input.prompt, input.filePath, input.filenameHint, input.filenameHintSource);
     const stdout = await runClaudeCli(this.config.executable, prompt, this.config.model, this.config.timeoutMs, path.dirname(input.filePath));
     const payload = parseClaudeJson(stdout);
 
@@ -30,13 +30,43 @@ export class ClaudeMetadataProvider implements VisionRecognitionProvider {
   }
 }
 
-function buildClaudePrompt(basePrompt: string, filePath: string): string {
-  return [
-    basePrompt.trim(),
-    '',
+function buildClaudePrompt(
+  basePrompt: string,
+  filePath: string,
+  filenameHint?: string,
+  filenameHintSource?: VisionRecognitionRequest['filenameHintSource']
+): string {
+  const sections = [basePrompt.trim()];
+
+  if (filenameHint) {
+    sections.push(
+      [
+        'Filename guidance (soft scene hint):',
+        `- Candidate hint from ${describeFilenameHintSource(filenameHintSource)}: ${filenameHint}`,
+        '- Treat this filename as an auxiliary clue, not a guaranteed fact.',
+        '- If the filename conflicts with visible image evidence, trust the image.'
+      ].join('\n')
+    );
+  }
+
+  sections.push(
     `Analyze the local image file at this absolute path: ${filePath}`,
     'Inspect the image directly from the filesystem and return JSON only.'
-  ].join('\n');
+  );
+
+  return sections.join('\n\n');
+}
+
+function describeFilenameHintSource(source: VisionRecognitionRequest['filenameHintSource']): string {
+  switch (source) {
+    case 'source.originalPath':
+      return 'the imported source filename';
+    case 'assetDir':
+      return 'the managed asset directory name';
+    case 'slug':
+    default:
+      return 'the managed asset slug';
+  }
 }
 
 function runClaudeCli(

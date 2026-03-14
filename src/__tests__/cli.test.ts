@@ -1,6 +1,9 @@
+import os from 'node:os';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { CliRuntime } from '../lib/runtime.js';
-import { buildCli, runCli } from '../cli.js';
+import { buildCli, isExecutedAsScript, runCli } from '../cli.js';
 
 function createRuntimeStub(): CliRuntime {
   return {
@@ -120,5 +123,23 @@ describe('CLI parsing', () => {
       output: 'json',
       reindex: true
     });
+  });
+
+  it('treats a symlinked CLI entrypoint as the executed script', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'imgbin-cli-test-'));
+    const realScriptPath = path.join(tempDir, 'dist', 'cli.js');
+    const linkPath = path.join(tempDir, 'node_modules', '@hagicode', 'imgbin', 'dist', 'cli.js');
+
+    await fs.mkdir(path.dirname(realScriptPath), { recursive: true });
+    await fs.mkdir(path.dirname(linkPath), { recursive: true });
+    await fs.writeFile(realScriptPath, 'console.log("cli");\n', 'utf8');
+    await fs.symlink(realScriptPath, linkPath);
+
+    try {
+      const result = await isExecutedAsScript(new URL(`file://${realScriptPath}`).href, linkPath);
+      expect(result).toBe(true);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

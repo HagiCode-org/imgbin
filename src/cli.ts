@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { realpath } from 'node:fs/promises';
 import { Command, CommanderError } from 'commander';
 import { registerAnnotateCommand } from './commands/annotate.js';
 import { registerBatchCommand } from './commands/batch.js';
@@ -52,7 +55,30 @@ export async function runCli(argv = process.argv, options: RuntimeOptions = {}):
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export async function isExecutedAsScript(importMetaUrl: string, argv1 = process.argv[1]): Promise<boolean> {
+  if (!argv1) {
+    return false;
+  }
+
+  const [scriptPath, invokedPath] = await Promise.all([
+    resolveExecutionPath(fileURLToPath(importMetaUrl)),
+    resolveExecutionPath(argv1)
+  ]);
+
+  return scriptPath === invokedPath;
+}
+
+async function resolveExecutionPath(targetPath: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+
+  try {
+    return await realpath(resolvedPath);
+  } catch {
+    return resolvedPath;
+  }
+}
+
+if (await isExecutedAsScript(import.meta.url)) {
   const exitCode = await runCli();
   process.exit(exitCode);
 }

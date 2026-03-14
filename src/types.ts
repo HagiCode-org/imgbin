@@ -51,6 +51,8 @@ export interface VisionRecognitionRequest {
   prompt: string;
   promptMetadata: AnalysisPromptMetadata;
   filePath: string;
+  filenameHint?: string;
+  filenameHintSource?: FilenameHintSource;
 }
 
 export interface VisionRecognitionResult {
@@ -61,6 +63,8 @@ export interface VisionRecognitionResult {
   model?: string;
   raw?: unknown;
 }
+
+export type FilenameHintSource = 'source.originalPath' | 'slug' | 'assetDir';
 
 export interface AssetMetadata {
   schemaVersion: 1 | 2;

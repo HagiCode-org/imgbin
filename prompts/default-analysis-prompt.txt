@@ -11,4 +11,5 @@ Rules:
 - Use 2 to 8 lowercase kebab-case tags.
 - Keep the title under 80 characters.
 - Keep the description under 200 characters.
+- Filenames may be provided as auxiliary scene clues, but visible image evidence always takes precedence.
 - Do not include markdown fences or extra commentary.

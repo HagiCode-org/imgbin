@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ClaudeMetadataProvider } from '../providers/claude-metadata-provider.js';
 import { AssetWriter } from '../services/asset-writer.js';
 import { JobRunner } from '../services/job-runner.js';
 import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
@@ -21,7 +22,7 @@ afterEach(async () => {
 
 function createRunner(options: {
   imageProvider?: FakeImageProvider;
-  visionProvider?: FakeVisionProvider;
+  visionProvider?: FakeVisionProvider | ClaudeMetadataProvider;
   now?: Date;
   defaultAnalysisPromptPath?: string;
 }) {
@@ -42,6 +43,37 @@ function createRunner(options: {
       quality: 80
     },
     now: () => options.now ?? new Date('2026-03-10T00:00:00.000Z')
+  });
+}
+
+async function createRecordingClaudeProvider(recordedPromptPath: string): Promise<ClaudeMetadataProvider> {
+  const binDir = await createTempDir('imgbin-claude-bin-');
+  cleanupDirs.push(binDir);
+  const scriptPath = path.join(binDir, 'fake-claude.mjs');
+  await fs.writeFile(
+    scriptPath,
+    `#!/usr/bin/env node
+import { promises as fs } from 'node:fs';
+
+const args = process.argv.slice(2);
+const promptIndex = args.indexOf('-p');
+const prompt = promptIndex >= 0 ? args[promptIndex + 1] ?? '' : '';
+const outputPath = ${JSON.stringify(recordedPromptPath)};
+await fs.writeFile(outputPath, prompt, 'utf8');
+
+process.stdout.write(JSON.stringify({
+  title: 'Recorded Claude Title',
+  tags: ['recorded', 'claude'],
+  description: 'Prompt recorder response.'
+}));
+`,
+    'utf8'
+  );
+  await fs.chmod(scriptPath, 0o755);
+  return new ClaudeMetadataProvider({
+    executable: scriptPath,
+    model: 'fake-claude-model',
+    timeoutMs: 5_000
   });
 }
 
@@ -87,6 +119,8 @@ describe('integration flows', () => {
     expect(metadata.status.recognition).toBe('succeeded');
     expect(metadata.status.thumbnail).toBe('succeeded');
     expect(visionProvider.calls[0]?.prompt.toLowerCase()).toContain('return strict json');
+    expect(visionProvider.calls[0]?.filenameHint).toBe(path.basename(result.assetDir!));
+    expect(visionProvider.calls[0]?.filenameHintSource).toBe('slug');
   });
 
   it('imports a standalone image before analysis and preserves manual metadata on later annotate runs', async () => {
@@ -98,9 +132,10 @@ describe('integration flows', () => {
     await fs.writeFile(sourcePath, await createPngBuffer());
 
     const metadataService = new MetadataService();
+    const visionProvider = new FakeVisionProvider();
     const runner = new JobRunner({
       imageProvider: new FakeImageProvider(),
-      visionProvider: new FakeVisionProvider(),
+      visionProvider,
       assetWriter: new AssetWriter(),
       metadataService,
       thumbnailService: new ThumbnailService(),
@@ -130,6 +165,8 @@ describe('integration flows', () => {
     const metadata = await metadataService.load(imported.assetDir!);
     expect(metadata.source?.type).toBe('imported');
     expect(metadata.source?.originalPath).toBe(sourcePath);
+    expect(visionProvider.calls[0]?.filenameHint).toBe('standalone.png');
+    expect(visionProvider.calls[0]?.filenameHintSource).toBe('source.originalPath');
     metadata.manual = {
       title: 'Manual Title',
       tags: ['manual-tag']
@@ -152,9 +189,10 @@ describe('integration flows', () => {
   it('scans pending assets in the library and retries analysis', async () => {
     const dir = await createTempDir();
     cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider();
     const runner = createRunner({
       imageProvider: new FakeImageProvider(),
-      visionProvider: new FakeVisionProvider()
+      visionProvider
     });
 
     const generated = await runner.generate({
@@ -171,6 +209,8 @@ describe('integration flows', () => {
     expect(generated.success).toBe(true);
     expect(result.success).toBe(true);
     expect(result.total).toBe(1);
+    expect(visionProvider.calls[0]?.filenameHint).toBe('needs-later-analysis');
+    expect(visionProvider.calls[0]?.filenameHintSource).toBe('slug');
     const metadata = JSON.parse(await fs.readFile(path.join(generated.assetDir!, 'metadata.json'), 'utf8')) as { status: { recognition: string } };
     expect(metadata.status.recognition).toBe('succeeded');
   });
@@ -222,6 +262,116 @@ describe('integration flows', () => {
     expect(result.success).toBe(true);
     expect(visionProvider.calls[0]?.prompt).toContain('imported marketing image');
     expect(visionProvider.calls[0]?.promptMetadata.path).toContain('custom-analysis-prompt.txt');
+  });
+
+  it('includes imported source filenames in the final Claude request', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const sourceDir = await createTempDir('imgbin-source-');
+    cleanupDirs.push(sourceDir);
+    const sourcePath = path.join(sourceDir, 'launch-hero.png');
+    const recordedPromptPath = path.join(dir, 'claude-imported-prompt.txt');
+    await fs.writeFile(sourcePath, await createPngBuffer());
+
+    const runner = createRunner({
+      visionProvider: await createRecordingClaudeProvider(recordedPromptPath)
+    });
+
+    const result = await runner.annotate({
+      assetPath: sourcePath,
+      importTo: dir,
+      overwrite: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    const recordedPrompt = await fs.readFile(recordedPromptPath, 'utf8');
+    expect(recordedPrompt).toContain('Filename guidance (soft scene hint):');
+    expect(recordedPrompt).toContain('launch-hero.png');
+    expect(recordedPrompt).toContain('imported source filename');
+    expect(recordedPrompt).toContain('trust the image');
+  });
+
+  it('falls back to the managed slug in the final Claude request when no source filename exists', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const recordedPromptPath = path.join(dir, 'claude-generated-prompt.txt');
+
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider: await createRecordingClaudeProvider(recordedPromptPath)
+    });
+
+    const result = await runner.generate({
+      prompt: 'orange dashboard hero',
+      output: dir,
+      tags: [],
+      annotate: true,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    const recordedPrompt = await fs.readFile(recordedPromptPath, 'utf8');
+    expect(recordedPrompt).toContain('Filename guidance (soft scene hint):');
+    expect(recordedPrompt).toContain('orange-dashboard-hero');
+    expect(recordedPrompt).toContain('managed asset slug');
+  });
+
+  it('filters placeholder filename hints out of the final Claude request', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const sourceDir = await createTempDir('imgbin-source-');
+    cleanupDirs.push(sourceDir);
+    const sourcePath = path.join(sourceDir, 'original.png');
+    const recordedPromptPath = path.join(dir, 'claude-placeholder-prompt.txt');
+    await fs.writeFile(sourcePath, await createPngBuffer());
+
+    const runner = createRunner({
+      visionProvider: await createRecordingClaudeProvider(recordedPromptPath)
+    });
+
+    const result = await runner.annotate({
+      assetPath: sourcePath,
+      importTo: dir,
+      slug: 'asset',
+      overwrite: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    const recordedPrompt = await fs.readFile(recordedPromptPath, 'utf8');
+    expect(recordedPrompt).not.toContain('Filename guidance (soft scene hint):');
+    expect(recordedPrompt).not.toContain('Candidate hint from');
+  });
+
+  it('keeps runtime filename guidance when using a custom analysis prompt', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const recordedPromptPath = path.join(dir, 'claude-custom-prompt.txt');
+
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider: await createRecordingClaudeProvider(recordedPromptPath)
+    });
+
+    const result = await runner.generate({
+      prompt: 'custom prompt asset',
+      output: dir,
+      slug: 'marketing-hero',
+      tags: [],
+      annotate: true,
+      thumbnail: false,
+      dryRun: false,
+      analysisPromptPath: path.join(fixtureDir, 'custom-analysis-prompt.txt')
+    });
+
+    expect(result.success).toBe(true);
+    const recordedPrompt = await fs.readFile(recordedPromptPath, 'utf8');
+    expect(recordedPrompt).toContain('imported marketing image');
+    expect(recordedPrompt).toContain('Filename guidance (soft scene hint):');
+    expect(recordedPrompt).toContain('marketing-hero');
+    expect(recordedPrompt).toContain('managed asset slug');
   });
 
   it('searches generated and imported assets through the persisted library index', async () => {
