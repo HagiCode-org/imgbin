@@ -35,6 +35,23 @@ describe('metadata merge rules', () => {
         id: 'default-analysis-prompt.txt',
         path: '/tmp/default-analysis-prompt.txt',
         type: 'default'
+      },
+      {
+        provenance: {
+          providerId: 'claude',
+          provider: 'fake-provider',
+          promptId: 'default-analysis-prompt.txt',
+          promptPath: '/tmp/default-analysis-prompt.txt',
+          promptSourceType: 'default',
+          sceneType: 'product-ui',
+          attempt: 1,
+          mode: 'initial',
+          updatedAt: '2026-03-10T00:00:01.000Z',
+          analysisContextType: 'inline',
+          analysisContextPreview: 'dashboard context'
+        },
+        diagnostics: [],
+        retryHistory: []
       }
     );
 
@@ -43,6 +60,8 @@ describe('metadata merge rules', () => {
     expect(merged.recognized?.title).toBe('Recognized Hero Title');
     expect(merged.recognized?.tags).toEqual(['recognized-tag']);
     expect(merged.recognized?.promptId).toBe('default-analysis-prompt.txt');
+    expect(merged.recognized?.provenance?.providerId).toBe('claude');
+    expect(merged.recognized?.provenance?.analysisContextType).toBe('inline');
   });
 
   it('overwrites recognized fields when overwrite is enabled', () => {
@@ -69,6 +88,21 @@ describe('metadata merge rules', () => {
         id: 'default-analysis-prompt.txt',
         path: '/tmp/default-analysis-prompt.txt',
         type: 'default'
+      },
+      {
+        provenance: {
+          providerId: 'claude',
+          provider: 'fake-provider',
+          promptId: 'default-analysis-prompt.txt',
+          promptPath: '/tmp/default-analysis-prompt.txt',
+          promptSourceType: 'default',
+          sceneType: 'general',
+          attempt: 1,
+          mode: 'initial',
+          updatedAt: '2026-03-10T00:00:01.000Z'
+        },
+        diagnostics: [],
+        retryHistory: []
       }
     );
 
@@ -85,6 +119,21 @@ describe('metadata merge rules', () => {
         id: 'custom-analysis-prompt.txt',
         path: '/tmp/custom-analysis-prompt.txt',
         type: 'file'
+      },
+      {
+        provenance: {
+          providerId: 'http',
+          provider: 'fake-provider',
+          promptId: 'custom-analysis-prompt.txt',
+          promptPath: '/tmp/custom-analysis-prompt.txt',
+          promptSourceType: 'file',
+          sceneType: 'admin-ui',
+          attempt: 1,
+          mode: 'initial',
+          updatedAt: '2026-03-10T00:00:02.000Z'
+        },
+        diagnostics: [],
+        retryHistory: []
       }
     );
 
@@ -92,6 +141,7 @@ describe('metadata merge rules', () => {
     expect(second.recognized?.tags).toEqual(['new-tag']);
     expect(second.recognized?.overwriteApplied).toBe(true);
     expect(second.recognized?.promptPath).toBe('/tmp/custom-analysis-prompt.txt');
+    expect(second.recognized?.provenance?.providerId).toBe('http');
   });
 
   it('derives stable search fields from metadata and provenance', () => {
@@ -123,5 +173,53 @@ describe('metadata merge rules', () => {
     expect(document.fields['generated.promptSource.path']).toContain('/tmp/prompts/hero.json');
     expect(document.fields['source.originalPath']).toContain('/tmp/source/launch-hero.png');
     expect(document.searchText).toContain('orange dashboard hero');
+  });
+
+  it('records validation diagnostics without mutating existing presentation fields', () => {
+    const metadata = service.createInitialMetadata({
+      assetId: 'validation-asset',
+      slug: 'validation-asset',
+      assetDir: '/tmp/validation-asset',
+      originalFilename: 'original.png',
+      prompt: 'validation asset',
+      tags: ['existing'],
+      createdAt: '2026-03-10T00:00:00.000Z'
+    });
+
+    const failed = service.markRecognitionFailure(
+      metadata,
+      '2026-03-10T00:00:01.000Z',
+      'Validation failed: UI drift',
+      'validation',
+      [
+        {
+          code: 'ui-named-entity-drift',
+          message: 'UI-first scenes must stay grounded in interface evidence.',
+          field: 'result',
+          recoverable: true
+        }
+      ],
+      [
+        {
+          attempt: 1,
+          mode: 'initial',
+          reason: 'UI drift',
+          diagnostics: [
+            {
+              code: 'ui-named-entity-drift',
+              message: 'UI-first scenes must stay grounded in interface evidence.',
+              field: 'result',
+              recoverable: true
+            }
+          ]
+        }
+      ]
+    );
+
+    expect(failed.title).toBe('Validation Asset');
+    expect(failed.status.recognition).toBe('failed');
+    expect(failed.recognized?.lastErrorKind).toBe('validation');
+    expect(failed.recognized?.validation?.accepted).toBe(false);
+    expect(failed.recognized?.retryHistory).toHaveLength(1);
   });
 });
