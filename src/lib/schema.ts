@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const analysisProviderSchema = z.enum(['claude', 'codex', 'http']);
+
 export const imageProviderConfigSchema = z.object({
   url: z.string().url(),
   apiKey: z.string().optional(),
@@ -11,6 +13,12 @@ export const analysisCliConfigSchema = z.object({
   executable: z.string().min(1).default('claude'),
   model: z.string().optional(),
   timeoutMs: z.number().int().positive().default(60000)
+});
+
+export const codexCliConfigSchema = analysisCliConfigSchema.extend({
+  executable: z.string().min(1).default('codex'),
+  baseUrl: z.string().url().optional(),
+  apiKey: z.string().optional()
 });
 
 export const thumbnailConfigSchema = z.object({
@@ -43,6 +51,8 @@ export const batchJobSchema = z
     importTo: z.string().min(1).optional(),
     overwriteRecognition: z.boolean().default(false),
     analysisPromptPath: z.string().min(1).optional(),
+    analysisContext: z.string().min(1).optional(),
+    analysisContextFile: z.string().min(1).optional(),
     pendingLibrary: z.string().min(1).optional()
   })
   .superRefine((value, ctx) => {
@@ -61,10 +71,30 @@ export const batchJobSchema = z
       });
     }
 
+    if (value.analysisContext && value.analysisContextFile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Batch jobs cannot provide both analysisContext and analysisContextFile.'
+      });
+    }
+
     if (value.pendingLibrary && modeCount > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'pendingLibrary jobs cannot be combined with prompt, promptFile, or assetPath.'
+      });
+    }
+
+    const runsRecognition =
+      Boolean(value.pendingLibrary) ||
+      Boolean(value.importTo) ||
+      Boolean((value.prompt || value.promptFile) && value.annotate) ||
+      Boolean(value.assetPath && !(value.thumbnail && !value.importTo && value.annotate === false));
+
+    if (runsRecognition && !value.analysisContext && !value.analysisContextFile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Recognition jobs must provide analysisContext or analysisContextFile.'
       });
     }
   });

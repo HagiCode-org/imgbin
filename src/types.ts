@@ -1,5 +1,10 @@
 export type ProcessingState = 'pending' | 'succeeded' | 'failed' | 'skipped';
 export type CommandStepName = 'normalize' | 'generate' | 'import' | 'recognition' | 'thumbnail' | 'scan';
+export type AnalysisProviderId = 'claude' | 'codex' | 'http';
+export type RecognitionSceneType = 'general' | 'product-ui' | 'admin-ui' | 'wireframe' | 'game-editor' | 'illustration-mixed';
+export type RecognitionHintConfidence = 'low' | 'medium' | 'high';
+export type RecognitionRetryMode = 'initial' | 'strict-retry';
+export type RecognitionFailureKind = 'provider-resolution' | 'provider-execution' | 'validation';
 
 export interface PromptSourceMetadata {
   type: 'raw' | 'docs-prompt-file';
@@ -15,9 +20,20 @@ export interface AnalysisPromptMetadata {
   path: string;
 }
 
+export interface AnalysisContextMetadata {
+  type: 'inline' | 'file';
+  path?: string;
+  preview: string;
+}
+
 export interface LoadedAnalysisPrompt {
   text: string;
   metadata: AnalysisPromptMetadata;
+}
+
+export interface LoadedAnalysisContext {
+  text: string;
+  metadata: AnalysisContextMetadata;
 }
 
 export interface NormalizedGenerationInput {
@@ -53,6 +69,7 @@ export interface VisionRecognitionRequest {
   filePath: string;
   filenameHint?: string;
   filenameHintSource?: FilenameHintSource;
+  recognitionContext: RecognitionContext;
 }
 
 export interface VisionRecognitionResult {
@@ -61,10 +78,71 @@ export interface VisionRecognitionResult {
   description?: string;
   provider: string;
   model?: string;
+  sceneType?: RecognitionSceneType;
+  validationDiagnostics?: RecognitionValidationDiagnostic[];
+  retryHistory?: RecognitionRetryRecord[];
+  provenance?: Partial<RecognitionProvenance>;
+  requestId?: string;
   raw?: unknown;
 }
 
 export type FilenameHintSource = 'source.originalPath' | 'slug' | 'assetDir';
+
+export interface RecognitionSceneHint {
+  type: RecognitionSceneType;
+  reason: string;
+  confidence: RecognitionHintConfidence;
+}
+
+export interface RecognitionContext {
+  assetId: string;
+  assetDir: string;
+  slug: string;
+  sourceType?: 'generated' | 'imported';
+  selectedScene: RecognitionSceneType;
+  sceneHints: RecognitionSceneHint[];
+  analysisContext?: AnalysisContextMetadata;
+  retry: {
+    attempt: number;
+    maxAttempts: number;
+    mode: RecognitionRetryMode;
+  };
+}
+
+export interface RecognitionValidationDiagnostic {
+  code: string;
+  message: string;
+  field?: 'title' | 'tags' | 'description' | 'result';
+  recoverable: boolean;
+}
+
+export interface RecognitionRetryRecord {
+  attempt: number;
+  mode: RecognitionRetryMode;
+  reason: string;
+  diagnostics: RecognitionValidationDiagnostic[];
+}
+
+export interface RecognitionProvenance {
+  providerId?: AnalysisProviderId;
+  provider: string;
+  model?: string;
+  promptId: string;
+  promptPath: string;
+  promptSourceType: AnalysisPromptMetadata['type'];
+  sceneType: RecognitionSceneType;
+  attempt: number;
+  mode: RecognitionRetryMode;
+  updatedAt: string;
+  analysisContextType?: AnalysisContextMetadata['type'];
+  analysisContextPath?: string;
+  analysisContextPreview?: string;
+}
+
+export interface RecognitionValidationSummary {
+  accepted: boolean;
+  diagnostics: RecognitionValidationDiagnostic[];
+}
 
 export interface AssetMetadata {
   schemaVersion: 1 | 2;
@@ -97,12 +175,18 @@ export interface AssetMetadata {
     tags?: string[];
     description?: string;
     provider?: string;
+    providerId?: AnalysisProviderId;
     model?: string;
     updatedAt?: string;
     overwriteApplied?: boolean;
     promptId?: string;
     promptPath?: string;
     promptSourceType?: AnalysisPromptMetadata['type'];
+    sceneType?: RecognitionSceneType;
+    provenance?: RecognitionProvenance;
+    validation?: RecognitionValidationSummary;
+    retryHistory?: RecognitionRetryRecord[];
+    lastErrorKind?: RecognitionFailureKind;
     lastError?: string;
   };
   manual?: {
@@ -140,6 +224,8 @@ export interface BatchJobDefinition {
   importTo?: string;
   overwriteRecognition?: boolean;
   analysisPromptPath?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
   pendingLibrary?: string;
 }
 
@@ -158,6 +244,8 @@ export interface GenerateCommandInput {
   thumbnail: boolean;
   dryRun: boolean;
   analysisPromptPath?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
 }
 
 export interface AnnotateCommandInput {
@@ -166,6 +254,8 @@ export interface AnnotateCommandInput {
   dryRun: boolean;
   importTo?: string;
   analysisPromptPath?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
   slug?: string;
   title?: string;
   tags?: string[];
