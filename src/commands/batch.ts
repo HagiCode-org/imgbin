@@ -6,6 +6,8 @@ interface BatchOptions {
   manifest?: string;
   pendingLibrary?: string;
   output?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
   dryRun?: boolean;
 }
 
@@ -16,6 +18,8 @@ export function registerBatchCommand(program: Command, runtime: CliRuntime): voi
     .option('--manifest <path>', 'Path to batch manifest')
     .option('--pending-library <dir>', 'Scan a managed library for assets with pending or failed analysis')
     .option('--output <dir>', 'Override output directory for generated jobs')
+    .option('--analysis-context <text>', 'Inline context for pending-library recognition runs')
+    .option('--analysis-context-file <path>', 'Path to a file containing analysis context for pending-library runs')
     .option('--dry-run', 'Preview work without writing files')
     .action(async (options: BatchOptions) => {
       if (!options.manifest && !options.pendingLibrary) {
@@ -24,10 +28,24 @@ export function registerBatchCommand(program: Command, runtime: CliRuntime): voi
       if (options.manifest && options.pendingLibrary) {
         throw new AppError('Provide either --manifest or --pending-library, not both.', 1);
       }
+      if (options.analysisContext && options.analysisContextFile) {
+        throw new AppError('Provide either --analysis-context or --analysis-context-file, not both.', 1);
+      }
+      if (options.pendingLibrary && !options.analysisContext && !options.analysisContextFile) {
+        throw new AppError('Pending-library recognition requires --analysis-context or --analysis-context-file.', 1);
+      }
 
       const manifest = options.manifest
         ? await runtime.manifestLoader.load(options.manifest)
-        : { jobs: [{ pendingLibrary: options.pendingLibrary! }] };
+        : {
+            jobs: [
+              {
+                pendingLibrary: options.pendingLibrary!,
+                analysisContext: options.analysisContext,
+                analysisContextFile: options.analysisContextFile
+              }
+            ]
+          };
       const result = await runtime.jobRunner.batch(manifest.jobs, options.output ?? runtime.config.outputDir, Boolean(options.dryRun));
 
       runtime.logger.info(`Batch complete: ${result.succeeded}/${result.total} succeeded, ${result.failed} failed.`);

@@ -13,6 +13,8 @@ interface GenerateOptions {
   thumbnail?: boolean;
   dryRun?: boolean;
   analysisPrompt?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
 }
 
 export function registerGenerateCommand(program: Command, runtime: CliRuntime): void {
@@ -25,8 +27,10 @@ export function registerGenerateCommand(program: Command, runtime: CliRuntime): 
     .option('--slug <slug>', 'Optional asset slug override')
     .option('--title <title>', 'Optional title override')
     .option('--tag <tag>', 'Add a tag to metadata', collect, [])
-    .option('--annotate', 'Run Claude metadata analysis after generation')
+    .option('--annotate', 'Run multimodal metadata analysis after generation')
     .option('--analysis-prompt <path>', 'Override the default local analysis prompt file')
+    .option('--analysis-context <text>', 'Inline context that can assist multimodal metadata analysis')
+    .option('--analysis-context-file <path>', 'Path to a file containing extra analysis context')
     .option('--thumbnail', 'Create a thumbnail after generation')
     .option('--dry-run', 'Preview work without writing files')
     .action(async (options: GenerateOptions) => {
@@ -35,6 +39,12 @@ export function registerGenerateCommand(program: Command, runtime: CliRuntime): 
       }
       if (options.prompt && options.promptFile) {
         throw new AppError('Provide either --prompt or --prompt-file, not both.', 1);
+      }
+      if (options.analysisContext && options.analysisContextFile) {
+        throw new AppError('Provide either --analysis-context or --analysis-context-file, not both.', 1);
+      }
+      if (options.annotate && !options.analysisContext && !options.analysisContextFile) {
+        throw new AppError('Annotated generation requires --analysis-context or --analysis-context-file.', 1);
       }
 
       const result = await runtime.jobRunner.generate({
@@ -47,7 +57,9 @@ export function registerGenerateCommand(program: Command, runtime: CliRuntime): 
         annotate: Boolean(options.annotate),
         thumbnail: Boolean(options.thumbnail),
         dryRun: Boolean(options.dryRun),
-        analysisPromptPath: options.analysisPrompt
+        analysisPromptPath: options.analysisPrompt,
+        analysisContext: options.analysisContext,
+        analysisContextFile: options.analysisContextFile
       });
 
       logResult(runtime, result);
