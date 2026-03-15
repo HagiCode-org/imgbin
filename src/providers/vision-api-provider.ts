@@ -14,7 +14,13 @@ export class HttpVisionRecognitionProvider implements VisionRecognitionProvider 
         body: JSON.stringify({
           imageBase64: input.buffer.toString('base64'),
           mimeType: input.mimeType,
-          model: input.model ?? this.config.model
+          model: input.model ?? this.config.model,
+          prompt: input.prompt,
+          promptMetadata: input.promptMetadata,
+          filePath: input.filePath,
+          filenameHint: input.filenameHint,
+          filenameHintSource: input.filenameHintSource,
+          recognitionContext: input.recognitionContext
         })
       },
       this.config.timeoutMs
@@ -29,6 +35,7 @@ export class HttpVisionRecognitionProvider implements VisionRecognitionProvider 
       tags?: string[];
       description?: string;
       model?: string;
+      requestId?: string;
     };
 
     return {
@@ -37,6 +44,7 @@ export class HttpVisionRecognitionProvider implements VisionRecognitionProvider 
       description: payload.description,
       provider: 'http-vision-api',
       model: payload.model ?? input.model ?? this.config.model,
+      requestId: payload.requestId,
       raw: payload
     };
   }

@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { AppError } from '../lib/errors.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { CliRuntime } from '../lib/runtime.js';
 import { buildCli, isExecutedAsScript, runCli } from '../cli.js';
@@ -71,7 +72,9 @@ describe('CLI parsing', () => {
       '--annotate',
       '--thumbnail',
       '--analysis-prompt',
-      './analysis.txt'
+      './analysis.txt',
+      '--analysis-context',
+      'dashboard roster editor'
     ]);
 
     expect(runtime.jobRunner.generate).toHaveBeenCalledWith({
@@ -84,7 +87,59 @@ describe('CLI parsing', () => {
       annotate: true,
       thumbnail: true,
       dryRun: false,
-      analysisPromptPath: './analysis.txt'
+      analysisPromptPath: './analysis.txt',
+      analysisContext: 'dashboard roster editor',
+      analysisContextFile: undefined
+    });
+  });
+
+  it('maps annotate analysis context flags into the job runner input', async () => {
+    const runtime = createRuntimeStub();
+    const cli = buildCli(runtime);
+
+    await cli.parseAsync([
+      'node',
+      'imgbin',
+      'annotate',
+      './asset.png',
+      '--analysis-context-file',
+      './context.txt',
+      '--import-to',
+      './library'
+    ]);
+
+    expect(runtime.jobRunner.annotate).toHaveBeenCalledWith({
+      assetPath: './asset.png',
+      overwrite: false,
+      dryRun: false,
+      importTo: './library',
+      analysisPromptPath: undefined,
+      analysisContext: undefined,
+      analysisContextFile: './context.txt',
+      slug: undefined,
+      title: undefined,
+      tags: [],
+      thumbnail: false
+    });
+  });
+
+  it('rejects annotated generation without analysis context', async () => {
+    const runtime = createRuntimeStub();
+    const cli = buildCli(runtime);
+
+    await expect(
+      cli.parseAsync(['node', 'imgbin', 'generate', '--prompt', 'hello', '--annotate'])
+    ).rejects.toMatchObject<AppError>({
+      message: 'Annotated generation requires --analysis-context or --analysis-context-file.'
+    });
+  });
+
+  it('rejects annotate without analysis context', async () => {
+    const runtime = createRuntimeStub();
+    const cli = buildCli(runtime);
+
+    await expect(cli.parseAsync(['node', 'imgbin', 'annotate', './asset.png'])).rejects.toMatchObject<AppError>({
+      message: 'Image recognition requires --analysis-context or --analysis-context-file.'
     });
   });
 

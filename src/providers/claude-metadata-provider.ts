@@ -1,71 +1,40 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { AnalysisCliRuntimeConfig } from '../lib/config.js';
-import { AppError } from '../lib/errors.js';
+import { AppError, RecognitionError } from '../lib/errors.js';
 import type { VisionRecognitionProvider, VisionRecognitionRequest, VisionRecognitionResult } from '../types.js';
+import { buildProviderPrompt, parseRecognitionJson } from './vision-provider-utils.js';
 
 export class ClaudeMetadataProvider implements VisionRecognitionProvider {
   public constructor(private readonly config: AnalysisCliRuntimeConfig) {}
 
   public async recognizeImage(input: VisionRecognitionRequest): Promise<VisionRecognitionResult> {
     if (!this.config.model) {
-      throw new AppError(
+      throw new RecognitionError(
         'Claude analysis model is not configured. Set IMGBIN_ANALYSIS_API_MODEL or ANTHROPIC_MODEL.',
-        2
+        'provider-resolution'
       );
     }
 
-    const prompt = buildClaudePrompt(input.prompt, input.filePath, input.filenameHint, input.filenameHintSource);
+    const prompt = buildProviderPrompt(
+      input.prompt,
+      input,
+      [
+        `Analyze the local image file at this absolute path: ${input.filePath}`,
+        'Inspect the image directly from the filesystem and return JSON only.'
+      ].join('\n')
+    );
     const stdout = await runClaudeCli(this.config.executable, prompt, this.config.model, this.config.timeoutMs, path.dirname(input.filePath));
-    const payload = parseClaudeJson(stdout);
+    const payload = parseRecognitionJson(stdout, 'Claude CLI');
 
     return {
       title: payload.title,
       tags: payload.tags ?? [],
       description: payload.description,
-      provider: 'local-claude-cli',
+      provider: 'claude-cli',
       model: this.config.model,
       raw: payload
     };
-  }
-}
-
-function buildClaudePrompt(
-  basePrompt: string,
-  filePath: string,
-  filenameHint?: string,
-  filenameHintSource?: VisionRecognitionRequest['filenameHintSource']
-): string {
-  const sections = [basePrompt.trim()];
-
-  if (filenameHint) {
-    sections.push(
-      [
-        'Filename guidance (soft scene hint):',
-        `- Candidate hint from ${describeFilenameHintSource(filenameHintSource)}: ${filenameHint}`,
-        '- Treat this filename as an auxiliary clue, not a guaranteed fact.',
-        '- If the filename conflicts with visible image evidence, trust the image.'
-      ].join('\n')
-    );
-  }
-
-  sections.push(
-    `Analyze the local image file at this absolute path: ${filePath}`,
-    'Inspect the image directly from the filesystem and return JSON only.'
-  );
-
-  return sections.join('\n\n');
-}
-
-function describeFilenameHintSource(source: VisionRecognitionRequest['filenameHintSource']): string {
-  switch (source) {
-    case 'source.originalPath':
-      return 'the imported source filename';
-    case 'assetDir':
-      return 'the managed asset directory name';
-    case 'slug':
-    default:
-      return 'the managed asset slug';
   }
 }
 
@@ -123,20 +92,4 @@ function runClaudeCli(
       resolve(stdout.trim());
     });
   });
-}
-
-function parseClaudeJson(output: string): { title?: string; tags?: string[]; description?: string } {
-  const trimmed = output.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  const jsonCandidate = firstBrace >= 0 && lastBrace > firstBrace ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed;
-
-  try {
-    return JSON.parse(jsonCandidate) as { title?: string; tags?: string[]; description?: string };
-  } catch (error) {
-    throw new AppError(
-      `Failed to parse Claude CLI JSON response: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      2
-    );
-  }
 }

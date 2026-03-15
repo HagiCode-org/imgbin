@@ -7,6 +7,7 @@ import { JobRunner } from '../services/job-runner.js';
 import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
 import { MetadataService } from '../services/metadata.js';
 import { PromptSourceLoader } from '../services/prompt-source-loader.js';
+import { RecognitionValidator } from '../services/recognition-validator.js';
 import { SearchIndexService } from '../services/search-index.js';
 import { SearchService } from '../services/search-service.js';
 import { ThumbnailService } from '../services/thumbnail.js';
@@ -15,6 +16,7 @@ import { createPngBuffer, createTempDir, FakeImageProvider, FakeVisionProvider }
 const cleanupDirs: string[] = [];
 const fixtureDir = path.resolve('src/__tests__/fixtures');
 const defaultAnalysisPromptPath = path.resolve('prompts/default-analysis-prompt.txt');
+const DEFAULT_ANALYSIS_CONTEXT = 'Test analysis context: treat the image as a managed UI/editor screenshot and stay grounded in visible evidence.';
 
 afterEach(async () => {
   await Promise.all(cleanupDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
@@ -32,6 +34,7 @@ function createRunner(options: {
     visionProvider: options.visionProvider,
     assetWriter: new AssetWriter(),
     metadataService,
+    recognitionValidator: new RecognitionValidator(),
     thumbnailService: new ThumbnailService(),
     promptSourceLoader: new PromptSourceLoader(),
     managedAssetScanner: new ManagedAssetScanner(),
@@ -81,7 +84,16 @@ describe('integration flows', () => {
   it('generates from a docs prompt file, writes metadata, and records prompt provenance', async () => {
     const dir = await createTempDir();
     cleanupDirs.push(dir);
-    const visionProvider = new FakeVisionProvider();
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Recognized Illustrated Dashboard Panel',
+          tags: ['dashboard-ui', 'hero-illustration', 'editor-panel'],
+          description: 'An illustrated dashboard hero layout with interface panels.',
+          provider: 'claude-cli'
+        }
+      ]
+    });
     const runner = createRunner({
       imageProvider: new FakeImageProvider(),
       visionProvider
@@ -92,6 +104,7 @@ describe('integration flows', () => {
       output: dir,
       tags: ['dashboard', 'hero'],
       annotate: true,
+      analysisContext: 'Documentation hero asset with dashboard cards and visible interface layout.',
       thumbnail: true,
       dryRun: false
     });
@@ -113,12 +126,13 @@ describe('integration flows', () => {
     expect(metadata.generated.promptSource?.path).toContain('docs-prompt.json');
     expect(metadata.recognized?.promptPath).toBe(defaultAnalysisPromptPath);
     expect(metadata.recognized?.promptId).toBe('default-analysis-prompt.txt');
-    expect(metadata.title).toBe('Recognized Sunset Panel');
-    expect(metadata.tags).toEqual(['sunset', 'panel', 'ui']);
+    expect(metadata.title).toBe('Recognized Illustrated Dashboard Panel');
+    expect(metadata.tags).toEqual(['dashboard-ui', 'hero-illustration', 'editor-panel']);
     expect(metadata.paths.thumbnail).toBe('thumbnail.webp');
     expect(metadata.status.recognition).toBe('succeeded');
     expect(metadata.status.thumbnail).toBe('succeeded');
     expect(visionProvider.calls[0]?.prompt.toLowerCase()).toContain('return strict json');
+    expect(visionProvider.calls[0]?.recognitionContext.selectedScene).toBe('illustration-mixed');
     expect(visionProvider.calls[0]?.filenameHint).toBe(path.basename(result.assetDir!));
     expect(visionProvider.calls[0]?.filenameHintSource).toBe('slug');
   });
@@ -138,6 +152,7 @@ describe('integration flows', () => {
       visionProvider,
       assetWriter: new AssetWriter(),
       metadataService,
+      recognitionValidator: new RecognitionValidator(),
       thumbnailService: new ThumbnailService(),
       promptSourceLoader: new PromptSourceLoader(),
       managedAssetScanner: new ManagedAssetScanner(),
@@ -156,6 +171,7 @@ describe('integration flows', () => {
       importTo: dir,
       overwrite: false,
       dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       tags: ['imported']
     });
 
@@ -176,7 +192,8 @@ describe('integration flows', () => {
     const annotated = await runner.annotate({
       assetPath: imported.assetDir!,
       overwrite: false,
-      dryRun: false
+      dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT
     });
 
     expect(annotated.success).toBe(true);
@@ -204,7 +221,7 @@ describe('integration flows', () => {
       dryRun: false
     });
 
-    const result = await runner.batch([{ pendingLibrary: dir }], dir, false);
+    const result = await runner.batch([{ pendingLibrary: dir, analysisContext: DEFAULT_ANALYSIS_CONTEXT }], dir, false);
 
     expect(generated.success).toBe(true);
     expect(result.success).toBe(true);
@@ -228,6 +245,7 @@ describe('integration flows', () => {
       output: dir,
       tags: [],
       annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       thumbnail: false,
       dryRun: false
     });
@@ -254,6 +272,7 @@ describe('integration flows', () => {
       output: dir,
       tags: [],
       annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       thumbnail: false,
       dryRun: false,
       analysisPromptPath: path.join(fixtureDir, 'custom-analysis-prompt.txt')
@@ -262,6 +281,236 @@ describe('integration flows', () => {
     expect(result.success).toBe(true);
     expect(visionProvider.calls[0]?.prompt).toContain('imported marketing image');
     expect(visionProvider.calls[0]?.promptMetadata.path).toContain('custom-analysis-prompt.txt');
+  });
+
+  it('preserves Chinese filename hints and analysis context for imported screenshots', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const sourceDir = await createTempDir('imgbin-source-');
+    cleanupDirs.push(sourceDir);
+    const sourcePath = path.join(sourceDir, '冒险团-副本管理.png');
+    await fs.writeFile(sourcePath, await createPngBuffer());
+
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Adventure Squad Dungeon Management Editor',
+          tags: ['game-editor', 'fantasy-ui', 'roster-management'],
+          description: 'A fantasy roster and dungeon management editor.',
+          provider: 'codex-cli'
+        }
+      ]
+    });
+    const runner = createRunner({
+      visionProvider
+    });
+
+    const result = await runner.annotate({
+      assetPath: sourcePath,
+      importTo: dir,
+      overwrite: false,
+      dryRun: false,
+      analysisContext:
+        '这是一个冒险团副本管理页面，重点识别副本配置、队伍编成、已分配英雄和右侧编辑器面板。'
+    });
+
+    expect(result.success).toBe(true);
+    expect(visionProvider.calls[0]?.filenameHint).toBe('冒险团-副本管理.png');
+    expect(visionProvider.calls[0]?.recognitionContext.selectedScene).toBe('game-editor');
+    expect(visionProvider.calls[0]?.recognitionContext.analysisContext?.type).toBe('inline');
+    expect(visionProvider.calls[0]?.prompt).toContain('Project or user supplied context (auxiliary only):');
+    expect(visionProvider.calls[0]?.prompt).toContain('冒险团副本管理页面');
+  });
+
+  it('loads analysis context from file and records provenance metadata', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Adventure Squad Dungeon Management Editor',
+          tags: ['game-editor', 'fantasy-ui', 'roster-management'],
+          description: 'A fantasy roster and dungeon management editor.',
+          provider: 'codex-cli'
+        }
+      ]
+    });
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider
+    });
+
+    const result = await runner.generate({
+      prompt: 'fantasy roster workspace screenshot',
+      output: dir,
+      tags: [],
+      annotate: true,
+      thumbnail: false,
+      dryRun: false,
+      analysisContextFile: path.join(fixtureDir, 'analysis-context.txt')
+    });
+
+    expect(result.success).toBe(true);
+    const metadata = await new MetadataService().load(result.assetDir!);
+    expect(visionProvider.calls[0]?.recognitionContext.analysisContext?.type).toBe('file');
+    expect(visionProvider.calls[0]?.recognitionContext.analysisContext?.path).toContain('analysis-context.txt');
+    expect(metadata.recognized?.provenance?.analysisContextType).toBe('file');
+    expect(metadata.recognized?.provenance?.analysisContextPath).toContain('analysis-context.txt');
+    expect(metadata.recognized?.provenance?.analysisContextPreview).toContain('冒险团副本管理页面');
+  });
+
+  it('builds an admin-ui scene profile for complex dashboard screenshots', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Admin Settings Dashboard',
+          tags: ['admin-ui', 'settings-panel', 'dashboard'],
+          description: 'A software admin dashboard with settings panels.',
+          provider: 'claude-cli'
+        }
+      ]
+    });
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider
+    });
+
+    const result = await runner.generate({
+      prompt: 'admin settings dashboard screenshot',
+      output: dir,
+      tags: ['admin'],
+      annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    expect(visionProvider.calls[0]?.recognitionContext.selectedScene).toBe('admin-ui');
+    expect(visionProvider.calls[0]?.prompt).toContain('Scene profile guidance: admin-ui');
+  });
+
+  it('preserves mixed illustration and UI semantics in the recognized metadata', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Team Editor With Character Illustration',
+          tags: ['editor-ui', 'team-panel', 'character-illustration'],
+          description: 'A game team editor with visible interface panels and character artwork.',
+          provider: 'codex-cli'
+        }
+      ]
+    });
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider
+    });
+
+    const result = await runner.generate({
+      prompt: 'game editor panel with character illustration',
+      output: dir,
+      tags: ['editor'],
+      annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    const metadata = await new MetadataService().load(result.assetDir!);
+    expect(metadata.recognized?.sceneType).toBe('illustration-mixed');
+    expect(metadata.tags).toContain('editor-ui');
+    expect(metadata.tags).toContain('character-illustration');
+  });
+
+  it('retries once with stricter constraints when UI drift validation fails', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Anime Princess',
+          tags: ['anime-character', 'princess'],
+          description: 'A fantasy princess portrait.',
+          provider: 'codex-cli'
+        },
+        {
+          title: 'Admin Settings Dashboard',
+          tags: ['admin-ui', 'settings-panel', 'dashboard'],
+          description: 'A settings dashboard for a software admin panel.',
+          provider: 'codex-cli'
+        }
+      ]
+    });
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider
+    });
+
+    const result = await runner.generate({
+      prompt: 'admin settings dashboard',
+      output: dir,
+      tags: ['admin'],
+      annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(true);
+    expect(visionProvider.calls).toHaveLength(2);
+    expect(visionProvider.calls[1]?.recognitionContext.retry.mode).toBe('strict-retry');
+    expect(visionProvider.calls[1]?.prompt).toContain('Stricter retry constraints:');
+    const metadata = await new MetadataService().load(result.assetDir!);
+    expect(metadata.recognized?.retryHistory).toHaveLength(1);
+    expect(metadata.recognized?.validation?.accepted).toBe(true);
+    expect(metadata.recognized?.provider).toBe('codex-cli');
+  });
+
+  it('records validation failures distinctly when retry still cannot recover', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+    const visionProvider = new FakeVisionProvider({
+      responses: [
+        {
+          title: 'Anime Princess',
+          tags: ['anime-character', 'princess'],
+          description: 'A fantasy princess portrait.',
+          provider: 'http-vision-api'
+        },
+        {
+          title: 'Anime Princess Deluxe Edition',
+          tags: ['anime-character', 'princess'],
+          description: 'Another fantasy character portrait.',
+          provider: 'http-vision-api'
+        }
+      ]
+    });
+    const runner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider
+    });
+
+    const result = await runner.generate({
+      prompt: 'admin settings dashboard',
+      output: dir,
+      tags: ['admin'],
+      annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.steps?.find((step) => step.step === 'recognition')?.message).toBe('Metadata analysis failed validation');
+    const metadata = await new MetadataService().load(result.assetDir!);
+    expect(metadata.status.recognition).toBe('failed');
+    expect(metadata.recognized?.lastErrorKind).toBe('validation');
+    expect(metadata.recognized?.retryHistory).toHaveLength(2);
   });
 
   it('includes imported source filenames in the final Claude request', async () => {
@@ -281,7 +530,8 @@ describe('integration flows', () => {
       assetPath: sourcePath,
       importTo: dir,
       overwrite: false,
-      dryRun: false
+      dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT
     });
 
     expect(result.success).toBe(true);
@@ -307,6 +557,7 @@ describe('integration flows', () => {
       output: dir,
       tags: [],
       annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       thumbnail: false,
       dryRun: false
     });
@@ -336,7 +587,8 @@ describe('integration flows', () => {
       importTo: dir,
       slug: 'asset',
       overwrite: false,
-      dryRun: false
+      dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT
     });
 
     expect(result.success).toBe(true);
@@ -361,6 +613,7 @@ describe('integration flows', () => {
       slug: 'marketing-hero',
       tags: [],
       annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       thumbnail: false,
       dryRun: false,
       analysisPromptPath: path.join(fixtureDir, 'custom-analysis-prompt.txt')
@@ -389,6 +642,7 @@ describe('integration flows', () => {
       visionProvider: new FakeVisionProvider(),
       assetWriter: new AssetWriter(),
       metadataService,
+      recognitionValidator: new RecognitionValidator(),
       thumbnailService: new ThumbnailService(),
       promptSourceLoader: new PromptSourceLoader(),
       managedAssetScanner: new ManagedAssetScanner(),
@@ -416,6 +670,7 @@ describe('integration flows', () => {
       importTo: dir,
       overwrite: false,
       dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
       tags: ['launch']
     });
 
@@ -447,5 +702,61 @@ describe('integration flows', () => {
     expect(fuzzy.rebuilt).toBe(false);
     expect(fuzzy.results.some((item) => item.slug.includes('orange-dashboard-hero'))).toBe(true);
     expect(fuzzy.indexedCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('supports provider switching on the same asset while keeping provenance readable', async () => {
+    const dir = await createTempDir();
+    cleanupDirs.push(dir);
+
+    const firstRunner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider: new FakeVisionProvider({
+        responses: [
+          {
+            title: 'Dashboard Overview',
+            tags: ['dashboard', 'panel', 'ui'],
+            description: 'A dashboard overview.',
+            provider: 'claude-cli'
+          }
+        ]
+      })
+    });
+
+    const generated = await firstRunner.generate({
+      prompt: 'product dashboard screenshot',
+      output: dir,
+      tags: [],
+      annotate: true,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT,
+      thumbnail: false,
+      dryRun: false
+    });
+
+    const secondRunner = createRunner({
+      imageProvider: new FakeImageProvider(),
+      visionProvider: new FakeVisionProvider({
+        responses: [
+          {
+            title: 'Dashboard Settings Panel',
+            tags: ['admin-ui', 'settings-panel', 'dashboard'],
+            description: 'A provider-switched admin settings dashboard.',
+            provider: 'http-vision-api'
+          }
+        ]
+      })
+    });
+
+    const updated = await secondRunner.annotate({
+      assetPath: generated.assetDir!,
+      overwrite: true,
+      dryRun: false,
+      analysisContext: DEFAULT_ANALYSIS_CONTEXT
+    });
+
+    expect(updated.success).toBe(true);
+    const metadata = await new MetadataService().load(generated.assetDir!);
+    expect(metadata.recognized?.provider).toBe('http-vision-api');
+    expect(metadata.recognized?.provenance?.providerId).toBe('http');
+    expect(metadata.recognized?.title).toBe('Dashboard Settings Panel');
   });
 });

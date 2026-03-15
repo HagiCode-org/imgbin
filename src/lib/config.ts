@@ -2,10 +2,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import {
+  analysisProviderSchema,
   analysisCliConfigSchema,
+  codexCliConfigSchema,
   imageProviderConfigSchema,
   thumbnailConfigSchema
 } from './schema.js';
+import type { AnalysisProviderId } from '../types.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ANALYSIS_PROMPT_PATH = path.resolve(moduleDir, '../../prompts/default-analysis-prompt.txt');
@@ -23,6 +26,11 @@ export interface AnalysisCliRuntimeConfig {
   timeoutMs: number;
 }
 
+export interface CodexCliRuntimeConfig extends AnalysisCliRuntimeConfig {
+  baseUrl?: string;
+  apiKey?: string;
+}
+
 export interface AppConfig {
   outputDir: string;
   thumbnail: {
@@ -31,7 +39,10 @@ export interface AppConfig {
     quality: number;
   };
   imageApi?: ProviderRuntimeConfig;
+  analysisProvider: AnalysisProviderId;
   analysisCli: AnalysisCliRuntimeConfig;
+  codexCli: CodexCliRuntimeConfig;
+  visionApi?: ProviderRuntimeConfig;
   analysisPromptPath: string;
 }
 
@@ -54,11 +65,26 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): A
       env.IMGBIN_IMAGE_API_TIMEOUT_MS,
       imageProviderConfigSchema
     ),
+    analysisProvider: analysisProviderSchema.parse(env.IMGBIN_ANALYSIS_PROVIDER ?? 'claude'),
     analysisCli: analysisCliConfigSchema.parse({
-      executable: env.IMGBIN_ANALYSIS_CLI_PATH ?? 'claude',
-      model: env.IMGBIN_ANALYSIS_API_MODEL ?? env.ANTHROPIC_MODEL ?? env.IMGBIN_VISION_API_MODEL,
-      timeoutMs: parseNumber(env.IMGBIN_ANALYSIS_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_API_TIMEOUT_MS, 60000)
+      executable: env.IMGBIN_CLAUDE_CLI_PATH ?? env.IMGBIN_ANALYSIS_CLI_PATH ?? 'claude',
+      model: env.IMGBIN_CLAUDE_MODEL ?? env.IMGBIN_ANALYSIS_API_MODEL ?? env.ANTHROPIC_MODEL ?? env.IMGBIN_VISION_API_MODEL,
+      timeoutMs: parseNumber(env.IMGBIN_CLAUDE_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_API_TIMEOUT_MS, 60000)
     }),
+    codexCli: codexCliConfigSchema.parse({
+      executable: env.IMGBIN_CODEX_CLI_PATH ?? 'codex',
+      model: env.IMGBIN_CODEX_MODEL,
+      timeoutMs: parseNumber(env.IMGBIN_CODEX_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_TIMEOUT_MS, 60000),
+      baseUrl: env.IMGBIN_CODEX_BASE_URL ?? env.OPENAI_BASE_URL,
+      apiKey: env.IMGBIN_CODEX_API_KEY ?? env.CODEX_API_KEY
+    }),
+    visionApi: parseProviderConfig(
+      env.IMGBIN_VISION_API_URL,
+      env.IMGBIN_VISION_API_KEY,
+      env.IMGBIN_VISION_API_MODEL,
+      env.IMGBIN_VISION_API_TIMEOUT_MS ?? env.IMGBIN_ANALYSIS_TIMEOUT_MS,
+      imageProviderConfigSchema
+    ),
     analysisPromptPath: resolveConfigPath(cwd, env.IMGBIN_ANALYSIS_PROMPT_PATH, DEFAULT_ANALYSIS_PROMPT_PATH)
   };
 }

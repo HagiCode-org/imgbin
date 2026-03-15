@@ -36,22 +36,39 @@ export class FakeImageProvider implements ImageGenerationProvider {
 export class FakeVisionProvider implements VisionRecognitionProvider {
   public readonly calls: VisionRecognitionRequest[] = [];
 
-  public constructor(private readonly options: { shouldFail?: boolean } = {}) {}
+  public constructor(
+    private readonly options: {
+      shouldFail?: boolean;
+      responses?: VisionRecognitionResult[];
+      handler?: (input: VisionRecognitionRequest, index: number) => VisionRecognitionResult | Promise<VisionRecognitionResult>;
+    } = {}
+  ) {}
 
   public async recognizeImage(input: VisionRecognitionRequest): Promise<VisionRecognitionResult> {
     this.calls.push(input);
+    const callIndex = this.calls.length - 1;
 
     if (this.options.shouldFail) {
       throw new Error('Synthetic vision failure');
+    }
+
+    if (this.options.handler) {
+      return this.options.handler(input, callIndex);
+    }
+
+    const scriptedResponse = this.options.responses?.[callIndex];
+    if (scriptedResponse) {
+      return scriptedResponse;
     }
 
     return {
       title: 'Recognized Sunset Panel',
       tags: ['sunset', 'panel', 'ui'],
       description: 'A warm interface composition.',
-      provider: 'local-claude-cli',
+      provider: 'claude-cli',
       model: input.model ?? 'fake-vision-model',
-      raw: { ok: true, promptId: input.promptMetadata.id, filePath: input.filePath }
+      sceneType: input.recognitionContext.selectedScene,
+      raw: { ok: true, promptId: input.promptMetadata.id, filePath: input.filePath, scene: input.recognitionContext.selectedScene }
     };
   }
 }

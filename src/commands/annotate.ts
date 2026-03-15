@@ -7,6 +7,8 @@ interface AnnotateOptions {
   dryRun?: boolean;
   importTo?: string;
   analysisPrompt?: string;
+  analysisContext?: string;
+  analysisContextFile?: string;
   slug?: string;
   title?: string;
   tag?: string[];
@@ -20,18 +22,29 @@ export function registerAnnotateCommand(program: Command, runtime: CliRuntime): 
     .option('--overwrite', 'Overwrite previously recognized fields')
     .option('--import-to <dir>', 'Import a standalone image into this library directory before analysis')
     .option('--analysis-prompt <path>', 'Override the default local analysis prompt file')
+    .option('--analysis-context <text>', 'Inline context that can assist multimodal metadata analysis')
+    .option('--analysis-context-file <path>', 'Path to a file containing extra analysis context')
     .option('--slug <slug>', 'Optional slug override when importing a standalone image')
     .option('--title <title>', 'Optional title to seed metadata when importing')
     .option('--tag <tag>', 'Add a tag to metadata when importing', collect, [])
     .option('--thumbnail', 'Create a thumbnail after analysis')
     .option('--dry-run', 'Preview work without writing files')
     .action(async (assetPath: string, options: AnnotateOptions) => {
+      if (!options.analysisContext && !options.analysisContextFile) {
+        throw new AppError('Image recognition requires --analysis-context or --analysis-context-file.', 1);
+      }
+      if (options.analysisContext && options.analysisContextFile) {
+        throw new AppError('Provide either --analysis-context or --analysis-context-file, not both.', 1);
+      }
+
       const result = await runtime.jobRunner.annotate({
         assetPath,
         overwrite: Boolean(options.overwrite),
         dryRun: Boolean(options.dryRun),
         importTo: options.importTo,
         analysisPromptPath: options.analysisPrompt,
+        analysisContext: options.analysisContext,
+        analysisContextFile: options.analysisContextFile,
         slug: options.slug,
         title: options.title,
         tags: options.tag ?? [],

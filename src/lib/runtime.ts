@@ -2,13 +2,14 @@ import path from 'node:path';
 import { loadConfig, type AppConfig } from './config.js';
 import { createLogger, type Logger } from './logger.js';
 import { requireImageProviderConfig, HttpImageGenerationProvider } from '../providers/image-api-provider.js';
-import { ClaudeMetadataProvider } from '../providers/claude-metadata-provider.js';
+import { createVisionProvider } from '../providers/vision-provider-factory.js';
 import { AssetWriter } from '../services/asset-writer.js';
 import { JobRunner } from '../services/job-runner.js';
 import { ManagedAssetScanner } from '../services/managed-asset-scanner.js';
 import { ManifestLoader } from '../services/manifest-loader.js';
 import { MetadataService } from '../services/metadata.js';
 import { PromptSourceLoader } from '../services/prompt-source-loader.js';
+import { RecognitionValidator } from '../services/recognition-validator.js';
 import { SearchIndexService } from '../services/search-index.js';
 import { SearchService } from '../services/search-service.js';
 import { ThumbnailService } from '../services/thumbnail.js';
@@ -43,7 +44,7 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
   const searchIndexService = new SearchIndexService(metadataService);
 
   const imageProvider = options.imageProvider ?? (config.imageApi ? new HttpImageGenerationProvider(requireImageProviderConfig(config.imageApi)) : undefined);
-  const visionProvider = options.visionProvider ?? new ClaudeMetadataProvider(config.analysisCli);
+  const visionProvider = options.visionProvider ?? createVisionProvider(config);
 
   return {
     cwd,
@@ -59,6 +60,7 @@ export function createRuntime(options: RuntimeOptions = {}): CliRuntime {
       visionProvider,
       assetWriter,
       metadataService,
+      recognitionValidator: new RecognitionValidator(),
       thumbnailService,
       promptSourceLoader,
       managedAssetScanner,
