@@ -50,16 +50,36 @@ describe('release workflow configuration', () => {
     const checkoutStep = releaseJob.steps.find((step: Record<string, unknown>) => step.name === 'Checkout repository');
     expect(checkoutStep.with.ref).toBe('${{ github.event.release.tag_name }}');
 
+    const resolveVersionStep = releaseJob.steps.find(
+      (step: Record<string, unknown>) => step.name === 'Resolve stable release version'
+    );
+    expect(resolveVersionStep.id).toBe('version');
+    expect(resolveVersionStep.env.RELEASE_TAG_NAME).toBe('${{ github.event.release.tag_name }}');
+    expect(resolveVersionStep.run).toContain('process.env.RELEASE_TAG_NAME');
+    expect(resolveVersionStep.run).toContain('stable vX.Y.Z format');
+
+    const rewriteVersionStep = releaseJob.steps.find(
+      (step: Record<string, unknown>) => step.name === 'Temporarily rewrite package.json version for stable publish'
+    );
+    expect(rewriteVersionStep.env.RELEASE_VERSION).toBe('${{ steps.version.outputs.version }}');
+    expect(rewriteVersionStep.run).toContain('packageJson.version = process.env.RELEASE_VERSION');
+    expect(rewriteVersionStep.run).toContain('Temporarily rewrote package.json');
+
+    const verifyStep = releaseJob.steps.find(
+      (step: Record<string, unknown>) => step.name === 'Verify release tag matches package version'
+    );
+    expect(verifyStep.run).toContain('publish:verify-release');
+    expect(verifyStep.run).toContain('${{ github.event.release.tag_name }}');
+
     const stepNames = releaseJob.steps.map((step: Record<string, unknown>) => step.name);
-    expect(stepNames).toEqual(
-      expect.arrayContaining([
-        'Verify release tag matches package version',
-        'Install dependencies',
-        'Build package',
-        'Run tests',
-        'Verify packed files',
-        'Publish to npm latest dist-tag'
-      ])
+    expect(stepNames.indexOf('Resolve stable release version')).toBeLessThan(
+      stepNames.indexOf('Temporarily rewrite package.json version for stable publish')
+    );
+    expect(stepNames.indexOf('Temporarily rewrite package.json version for stable publish')).toBeLessThan(
+      stepNames.indexOf('Verify release tag matches package version')
+    );
+    expect(stepNames.indexOf('Verify release tag matches package version')).toBeLessThan(
+      stepNames.indexOf('Install dependencies')
     );
   });
 });

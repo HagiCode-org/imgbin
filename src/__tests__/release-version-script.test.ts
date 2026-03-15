@@ -13,7 +13,7 @@ function writeJson(filePath: string, data: unknown) {
 }
 
 describe('verify-release-version script', () => {
-  it('accepts a GitHub release event payload as the tag source', () => {
+  it('accepts a GitHub release event payload after package.json is temporarily rewritten to the tag version', () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'imgbin-release-version-'));
 
     try {
@@ -21,7 +21,8 @@ describe('verify-release-version script', () => {
       const eventPath = path.join(tempDir, 'release-event.json');
 
       writeJson(packageJsonPath, { name: '@hagicode/imgbin', version: '1.2.3' });
-      writeJson(eventPath, { release: { tag_name: 'v1.2.3' } });
+      writeJson(eventPath, { release: { tag_name: 'v1.2.4' } });
+      writeJson(packageJsonPath, { name: '@hagicode/imgbin', version: '1.2.4' });
 
       const result = spawnSync(process.execPath, [scriptPath, '', packageJsonPath], {
         cwd: tempDir,
@@ -30,13 +31,13 @@ describe('verify-release-version script', () => {
       });
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toBe('1.2.3');
+      expect(result.stdout).toBe('1.2.4');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  it('fails when the published release tag does not match package.json', () => {
+  it('fails when the temporary package.json rewrite does not align with the published release tag', () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'imgbin-release-version-'));
 
     try {
@@ -54,6 +55,26 @@ describe('verify-release-version script', () => {
 
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain('does not match package.json version 1.2.3');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when the release tag is not in the stable vX.Y.Z format', () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'imgbin-release-version-'));
+
+    try {
+      const packageJsonPath = path.join(tempDir, 'package.json');
+      writeJson(packageJsonPath, { name: '@hagicode/imgbin', version: '1.2.3' });
+
+      const result = spawnSync(process.execPath, [scriptPath, 'release-1.2.3', packageJsonPath], {
+        cwd: tempDir,
+        env: process.env,
+        encoding: 'utf8'
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('stable vX.Y.Z format');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

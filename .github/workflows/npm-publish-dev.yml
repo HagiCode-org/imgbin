@@ -83,11 +83,44 @@ jobs:
           cache-dependency-path: package-lock.json
           registry-url: https://registry.npmjs.org
 
-      - name: Verify release tag matches package version
+      - name: Resolve stable release version
         id: version
+        env:
+          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(node --input-type=module <<'EOF'
+          const tagName = process.env.RELEASE_TAG_NAME ?? "";
+          const match = tagName.match(/^v(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)$/);
+
+          if (!match?.groups) {
+            console.error(`Release tags must use the stable vX.Y.Z format. Received: ${tagName}`);
+            process.exit(1);
+          }
+
+          process.stdout.write(`${match.groups.major}.${match.groups.minor}.${match.groups.patch}`);
+          EOF
+          )"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved stable release version: $version"
+
+      - name: Temporarily rewrite package.json version for stable publish
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from "node:fs";
+
+          const packageJsonPath = "package.json";
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+
+          packageJson.version = process.env.RELEASE_VERSION;
+          fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+          EOF
+          echo "Temporarily rewrote package.json to version $RELEASE_VERSION"
+
+      - name: Verify release tag matches package version
         run: |
           version="$(npm run --silent publish:verify-release -- "${{ github.event.release.tag_name }}")"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Validated release version: $version"
 
       - name: Install dependencies

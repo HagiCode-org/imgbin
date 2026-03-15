@@ -36,7 +36,7 @@ ImgBin includes a GitHub Actions based npm publishing workflow for both prerelea
 - Pushes to `main` publish a unique prerelease build to the npm `dev` dist-tag.
 - Pushes to `main` also refresh the GitHub draft release notes through Release Drafter.
 - Stable releases publish only when a GitHub draft release for tag `vX.Y.Z` is published and target the npm `latest` dist-tag.
-- The stable release workflow fails if the release tag version does not exactly match `package.json`.
+- The stable release workflow derives the publish version from the GitHub Release tag, temporarily rewrites `package.json` to that version inside CI, and then verifies the rewritten manifest before publishing.
 
 ### Release draft flow
 
@@ -73,17 +73,17 @@ npm run pack:check
 
 For a stable release:
 
-1. update `package.json` to the target stable version,
-2. make sure the Release Drafter draft uses the matching tag such as `v0.1.0`, and
+1. make sure the Release Drafter draft uses the target stable tag such as `v0.1.1`,
+2. optionally simulate the workflow locally by rewriting a temporary copy of `package.json` to `0.1.1` and running `node scripts/verify-release-version.mjs v0.1.1 /path/to/temp-package.json`, and
 3. publish that draft release from the GitHub UI.
 
-The stable publish workflow checks out the published release tag and validates that it still matches `package.json` before running `npm publish --tag latest`.
+The stable publish workflow checks out the published release tag, resolves `0.1.1` from `v0.1.1`, temporarily rewrites `package.json` to `0.1.1`, and then validates that rewritten manifest before running `npm publish --tag latest`.
 
 ### Troubleshooting release drafts
 
 - If the draft notes are empty or mis-categorized, check the merged PR labels against `repos/imgbin/.github/release-drafter.yml`.
 - If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish-dev.yml` for the `release.published` run.
-- If the workflow reports a version mismatch, compare the published release tag with `package.json` and rerun after correcting the version source of truth.
+- If the workflow reports a version mismatch, compare the published release tag with the temporary `package.json` rewrite step output and rerun after correcting the release tag or manifest source.
 - If you need to discard a pending stable release, delete the draft release in GitHub before publishing it.
 
 ## Usage guide
