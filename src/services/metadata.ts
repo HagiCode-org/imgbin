@@ -5,6 +5,10 @@ import type {
   AssetMetadata,
   ProcessingState,
   PromptSourceMetadata,
+  RecognitionFailureKind,
+  RecognitionProvenance,
+  RecognitionRetryRecord,
+  RecognitionValidationDiagnostic,
   SearchIndexDocument,
   SearchableField,
   VisionRecognitionResult
@@ -74,7 +78,12 @@ export class MetadataService {
     recognition: VisionRecognitionResult,
     nowIso: string,
     overwrite: boolean,
-    promptMetadata: AnalysisPromptMetadata
+    promptMetadata: AnalysisPromptMetadata,
+    options: {
+      provenance: RecognitionProvenance;
+      diagnostics: RecognitionValidationDiagnostic[];
+      retryHistory: RecognitionRetryRecord[];
+    }
   ): AssetMetadata {
     const nextRecognized = overwrite
       ? {
@@ -82,12 +91,21 @@ export class MetadataService {
           tags: dedupeStrings(recognition.tags ?? []),
           description: recognition.description,
           provider: recognition.provider,
+          providerId: options.provenance.providerId,
           model: recognition.model,
           updatedAt: nowIso,
           overwriteApplied: true,
           promptId: promptMetadata.id,
           promptPath: promptMetadata.path,
           promptSourceType: promptMetadata.type,
+          sceneType: options.provenance.sceneType,
+          provenance: options.provenance,
+          validation: {
+            accepted: true,
+            diagnostics: options.diagnostics
+          },
+          retryHistory: options.retryHistory,
+          lastErrorKind: undefined,
           lastError: undefined
         }
       : {
@@ -95,12 +113,21 @@ export class MetadataService {
           tags: metadata.recognized?.tags?.length ? metadata.recognized.tags : dedupeStrings(recognition.tags ?? []),
           description: metadata.recognized?.description ?? recognition.description,
           provider: recognition.provider,
+          providerId: options.provenance.providerId,
           model: recognition.model,
           updatedAt: nowIso,
           overwriteApplied: false,
           promptId: promptMetadata.id,
           promptPath: promptMetadata.path,
           promptSourceType: promptMetadata.type,
+          sceneType: options.provenance.sceneType,
+          provenance: options.provenance,
+          validation: {
+            accepted: true,
+            diagnostics: options.diagnostics
+          },
+          retryHistory: options.retryHistory,
+          lastErrorKind: undefined,
           lastError: undefined
         };
 
@@ -109,7 +136,17 @@ export class MetadataService {
       recognized: nextRecognized,
       providerPayload: {
         ...metadata.providerPayload,
-        analysis: recognition.raw,
+        analysis: {
+          provider: recognition.provider,
+          model: recognition.model,
+          provenance: options.provenance,
+          validation: {
+            accepted: true,
+            diagnostics: options.diagnostics
+          },
+          retryHistory: options.retryHistory,
+          raw: recognition.raw
+        },
         vision: recognition.raw
       },
       status: {
@@ -129,6 +166,9 @@ export class MetadataService {
     metadata: AssetMetadata,
     nowIso: string,
     error: string,
+    kind: RecognitionFailureKind,
+    diagnostics: RecognitionValidationDiagnostic[] = [],
+    retryHistory: RecognitionRetryRecord[] = [],
     promptMetadata?: AnalysisPromptMetadata
   ): AssetMetadata {
     return {
@@ -138,12 +178,31 @@ export class MetadataService {
         promptId: promptMetadata?.id ?? metadata.recognized?.promptId,
         promptPath: promptMetadata?.path ?? metadata.recognized?.promptPath,
         promptSourceType: promptMetadata?.type ?? metadata.recognized?.promptSourceType,
+        validation: {
+          accepted: false,
+          diagnostics
+        },
+        retryHistory,
+        lastErrorKind: kind,
         lastError: error,
         updatedAt: nowIso
       },
+      providerPayload: {
+        ...metadata.providerPayload,
+        analysis: {
+          ...(isRecord(metadata.providerPayload?.analysis) ? metadata.providerPayload?.analysis : {}),
+          failure: {
+            kind,
+            error,
+            diagnostics,
+            retryHistory
+          }
+        }
+      },
       extra: {
         ...metadata.extra,
-        lastRecognitionError: error
+        lastRecognitionError: error,
+        lastRecognitionErrorKind: kind
       },
       status: {
         ...metadata.status,
@@ -309,4 +368,8 @@ function normalizeText(value: string): string {
 
 function isString(value: string | undefined): value is string {
   return Boolean(value?.trim());
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

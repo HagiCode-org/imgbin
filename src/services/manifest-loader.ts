@@ -25,6 +25,7 @@ export class ManifestLoader {
       assetPath: this.resolveOptionalPath(job.assetPath, manifestDir),
       importTo: this.resolveOptionalPath(job.importTo, manifestDir),
       analysisPromptPath: this.resolveOptionalPath(job.analysisPromptPath, manifestDir),
+      analysisContextFile: this.resolveOptionalPath(job.analysisContextFile, manifestDir),
       pendingLibrary: this.resolveOptionalPath(job.pendingLibrary, manifestDir)
     };
   }
