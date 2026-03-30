@@ -1,5 +1,7 @@
 # ImgBin
 
+[![npm version](https://img.shields.io/npm/v/%40hagicode%2Fimgbin?logo=npm)](https://www.npmjs.com/package/@hagicode/imgbin)
+
 [English](./README.md)
 
 ImgBin 是一个 TypeScript CLI，用于生成图片资源、将现有图片导入托管库、编写可搜索的元数据、搜索托管库、创建缩略图，以及运行 provider 路由的多模态图片元数据分析。

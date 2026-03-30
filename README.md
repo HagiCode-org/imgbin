@@ -1,5 +1,7 @@
 # ImgBin
 
+[![npm version](https://img.shields.io/npm/v/%40hagicode%2Fimgbin?logo=npm)](https://www.npmjs.com/package/@hagicode/imgbin)
+
 [简体中文](./README_cn.md)
 
 ImgBin is a TypeScript CLI for generating image assets, importing existing images into a managed library, writing searchable metadata, searching managed libraries, creating thumbnails, and running provider-routed multimodal image metadata analysis.
