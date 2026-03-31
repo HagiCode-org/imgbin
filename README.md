@@ -6,6 +6,10 @@
 
 ImgBin is a TypeScript CLI for generating image assets, importing existing images into a managed library, writing searchable metadata, searching managed libraries, creating thumbnails, and running provider-routed multimodal image metadata analysis.
 
+## AI-oriented docs
+
+For repo-local AI guidance and command-selection references, start at [`./skills/README.md`](./skills/README.md) and then open [`./skills/imgbin-cli/SKILL.md`](./skills/imgbin-cli/SKILL.md). These skill docs complement the human-oriented README; they do not replace it.
+
 ## Requirements
 
 - Node.js 20+

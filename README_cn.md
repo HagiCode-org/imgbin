@@ -6,6 +6,10 @@
 
 ImgBin 是一个 TypeScript CLI，用于生成图片资源、将现有图片导入托管库、编写可搜索的元数据、搜索托管库、创建缩略图，以及运行 provider 路由的多模态图片元数据分析。
 
+## AI 导向文档
+
+若要查看面向 AI 助手的仓库内指引与命令参考，请先阅读 [`./skills/README.md`](./skills/README.md)，再进入 [`./skills/imgbin-cli/SKILL.md`](./skills/imgbin-cli/SKILL.md)。这些 skill 文档用于补充本 README，不替代现有的人类使用指南。
+
 ## 环境要求
 
 - Node.js 20+
