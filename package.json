@@ -2,6 +2,7 @@
   "name": "@hagicode/imgbin",
   "version": "0.1.0",
   "description": "CLI tooling for generating, annotating, and indexing image assets.",
+  "license": "MIT",
   "homepage": "https://github.com/HagiCode-org/imgbin#readme",
   "bugs": {
     "url": "https://github.com/HagiCode-org/imgbin/issues"
