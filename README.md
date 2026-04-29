@@ -1,6 +1,8 @@
 # ImgBin
 
 [![npm version](https://img.shields.io/npm/v/%40hagicode%2Fimgbin?logo=npm)](https://www.npmjs.com/package/@hagicode/imgbin)
+[![npm downloads](https://img.shields.io/npm/dm/%40hagicode%2Fimgbin?logo=npm&color=2d8cf0)](https://www.npmjs.com/package/@hagicode/imgbin)
+[![license](https://img.shields.io/badge/license-MIT-ffd43b)](./LICENSE)
 
 [简体中文](./README_cn.md)
 
@@ -508,3 +510,7 @@ npm install
 npm run test
 npm run build
 ```
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
