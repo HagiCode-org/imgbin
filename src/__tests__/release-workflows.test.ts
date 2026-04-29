@@ -38,7 +38,7 @@ describe('release workflow configuration', () => {
   });
 
   it('publishes stable releases only from the GitHub release published event', () => {
-    const workflow = loadYaml('.github/workflows/npm-publish-dev.yml');
+    const workflow = loadYaml('.github/workflows/npm-publish.yml');
     const releaseJob = workflow.jobs['publish-release'];
 
     expect(workflow.on.push.branches).toEqual(['main']);
