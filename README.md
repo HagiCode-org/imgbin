@@ -65,11 +65,13 @@ Release Drafter manages the draft notes only. Draft review, delete, and publish 
 Before the workflows can publish successfully:
 
 1. configure npm trusted publishing for the `HagiCode-org/imgbin` GitHub repository,
-2. ensure the publishing package owner has access to the `@hagicode/imgbin` package on npm, and
+2. ensure the npm organization or user scope `hagicode` already exists and the publishing identity can create or update `@hagicode/imgbin`, and
 3. keep GitHub Actions enabled for the repository.
 
 The workflows are designed to publish with GitHub OIDC identity and provenance, not a long-lived `NPM_TOKEN`.
-Keep the trusted publisher configuration pointed at the repository's single publish workflow file.
+Keep the trusted publisher configuration pointed at the repository's single publish workflow file. In npm trusted publishing, use package `@hagicode/imgbin`, owner `HagiCode-org`, repository `imgbin`, and workflow filename `npm-publish.yml`. Do not enter the full workflow path as the filename; leave the npm environment field empty unless the workflow job explicitly declares an environment.
+
+If the scope is missing or the workflow identity cannot create packages under it, npm returns `E404 Not Found` during the final `PUT https://registry.npmjs.org/@hagicode%2fimgbin` publish request.
 
 ### Local release verification
 
@@ -92,8 +94,9 @@ The stable publish workflow checks out the published release tag, resolves `0.1.
 ### Troubleshooting release drafts
 
 - If the draft notes are empty or mis-categorized, check the merged PR labels against `repos/imgbin/.github/release-drafter.yml`.
-- If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish-dev.yml` for the `release.published` run.
+- If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish.yml` for the `release.published` run.
 - If the workflow reports a version mismatch, compare the published release tag with the temporary `package.json` rewrite step output and rerun after correcting the release tag or manifest source.
+- If the workflow fails with `npm ERR! code E404` while publishing `@hagicode/imgbin`, verify that the npm scope `hagicode` exists, that the package can be created or updated by the publishing identity, and that the trusted publisher is configured for workflow filename `npm-publish.yml`.
 - If you need to discard a pending stable release, delete the draft release in GitHub before publishing it.
 
 ## Usage guide
