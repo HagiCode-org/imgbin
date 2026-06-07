@@ -1,0 +1,5 @@
+action_recommendations:
+  - id: npm-publish
+    watch: true
+    include: true
+    reason: "publish npm package"
