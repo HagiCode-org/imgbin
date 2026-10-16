@@ -48,10 +48,10 @@ ImgBin 包含基于 GitHub Actions 的 npm 发布工作流，用于预发布和�
 
 ### 草稿发布流程
 
-草稿由 `repos/imgbin/.github/scripts/release-notes.mjs` 根据最新 `vX.Y.Z` 标签以来的提交历史生成。`feat` 提升次版本号，破坏性变更在 0.x 阶段提升次版本号（之后提升主版本号），其余提升补丁号；也可手动运行工作流并通过 `version` 输入覆盖。
+草稿由 `HagiCode-org/hagi-release-drafter@v0.1.2` 根据最新 `vX.Y.Z` 标签以来的提交历史生成，调用方为 `repos/imgbin/.github/workflows/release-draft-action.yml`。该工作流将顶层权限设为 `contents: read`，仅草稿作业持有 `contents: write`，检出时使用 `fetch-depth: 0` 和 `fetch-tags: true`，标题为 `ImgBin v{version}`。`feat` 提升次版本号，破坏性变更在 0.x 阶段提升次版本号（之后提升主版本号），其余提升补丁号；也可手动运行工作流并通过 `version` 输入覆盖。
 
 1. 向 `main` 提交（直接推送或通过合并 PR 均可），提交信息使用 Conventional Commits 格式（`feat:`、`fix:`、`docs:` 等；破坏性变更使用 `!` 或 `BREAKING CHANGE:` 页脚）。不再需要 PR 标签。
-2. 让 `repos/imgbin/.github/workflows/release-drafter.yml` 在 GitHub Releases 中刷新草稿发布说明。
+2. 让 `repos/imgbin/.github/workflows/release-draft-action.yml` 在 GitHub Releases 中刷新草稿发布说明。
 3. 在 GitHub UI 中查看草稿发布。
 4. 如果发布还未准备好，继续合并修复或在 GitHub 中直接删除草稿发布。
 5. 准备好后，在 GitHub 中发布草稿发布。那 `release.published` 事件会触发稳定的 npm `latest` 发布工作流。
@@ -91,7 +91,7 @@ npm run pack:check
 
 ### 草稿发布故障排除
 
-- 如果草稿说明为空或分类错误，请检查最新标签以来的提交信息是否符合 Conventional Commits（由 `repos/imgbin/.github/scripts/release-notes.mjs` 分组）。
+- 如果草稿说明为空或分类错误，请检查最新标签以来的提交信息是否符合 Conventional Commits（由 `hagi-release-drafter` 操作分组）。
 - 如果发布草稿后 `latest` 未发布，请检查 `repos/imgbin/.github/workflows/npm-publish.yml` 中的 `release.published` 运行。
 - 如果工作流报告版本不匹配，请将已发布的发布标签与临时 `package.json` 重写步骤输出进行比较，并在更正发布标签或清单源后重新运行。
 - 如果发布 `@hagicode/imgbin` 时工作流报 `npm ERR! code E404`，先确认 npm 上已经存在 `hagicode` scope、当前发布身份有权创建或更新该包，并且 trusted publisher 配置里的 workflow filename 是 `npm-publish.yml`。

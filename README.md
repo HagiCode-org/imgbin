@@ -50,10 +50,10 @@ ImgBin includes a GitHub Actions based npm publishing workflow for both prerelea
 
 ### Release draft flow
 
-The draft is generated from the commit history since the latest `vX.Y.Z` tag by `repos/imgbin/.github/scripts/release-notes.mjs`. A `feat` bumps the minor version, a breaking change bumps the minor (0.x) or major version, and anything else bumps the patch; run the workflow manually with the `version` input to override.
+The draft is generated from the commit history since the latest `vX.Y.Z` tag by `HagiCode-org/hagi-release-drafter@v0.1.2`, called from `repos/imgbin/.github/workflows/release-draft-action.yml`. The workflow sets top-level `contents: read`, gives only the draft job `contents: write`, checks out with `fetch-depth: 0` and `fetch-tags: true`, and uses the title `ImgBin v{version}`. A `feat` bumps the minor version, a breaking change bumps the minor (0.x) or major version, and anything else bumps the patch; run the workflow manually with the `version` input to override.
 
 1. Commit to `main` (directly or through merged PRs) using Conventional Commit messages (`feat:`, `fix:`, `docs:`, ..., `!` or a `BREAKING CHANGE:` footer for breaking changes). No PR labels are needed.
-2. Let `repos/imgbin/.github/workflows/release-drafter.yml` refresh the draft release notes in GitHub Releases.
+2. Let `repos/imgbin/.github/workflows/release-draft-action.yml` refresh the draft release notes in GitHub Releases.
 3. Review the draft release in the GitHub UI.
 4. If the release is not ready, continue merging fixes or delete the draft release directly in GitHub.
 5. When ready, publish the draft release in GitHub. That `release.published` event triggers the stable npm `latest` publish workflow.
@@ -93,7 +93,7 @@ The stable publish workflow checks out the published release tag, resolves `0.1.
 
 ### Troubleshooting release drafts
 
-- If the draft notes are empty or mis-categorized, check that the commit messages since the latest tag follow Conventional Commits (`repos/imgbin/.github/scripts/release-notes.mjs` groups them).
+- If the draft notes are empty or mis-categorized, check that the commit messages since the latest tag follow Conventional Commits (the `hagi-release-drafter` action groups them).
 - If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish.yml` for the `release.published` run.
 - If the workflow reports a version mismatch, compare the published release tag with the temporary `package.json` rewrite step output and rerun after correcting the release tag or manifest source.
 - If the workflow fails with `npm ERR! code E404` while publishing `@hagicode/imgbin`, verify that the npm scope `hagicode` exists, that the package can be created or updated by the publishing identity, and that the trusted publisher is configured for workflow filename `npm-publish.yml`.
