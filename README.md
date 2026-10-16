@@ -14,7 +14,7 @@ For repo-local AI guidance and command-selection references, start at [`./skills
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 24+
 - Access to an image generation HTTP API for `generate`
 - One configured analysis backend for `annotate` / `--annotate`: `claude`, `codex`, or a compatible HTTP vision API
 

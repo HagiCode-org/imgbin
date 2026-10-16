@@ -12,7 +12,7 @@ ImgBin 是一个 TypeScript CLI，用于生成图片资源、将现有图片导�
 
 ## 环境要求
 
-- Node.js 20+
+- Node.js 24+
 - 访问图片生成的 HTTP API 用于 `generate`
 - 配置一个用于 `annotate` / `--annotate` 的分析后端：`claude`、`codex` 或兼容的 HTTP 视觉 API
 
