@@ -12,29 +12,27 @@ function loadYaml(relativePath: string) {
 }
 
 describe('release workflow configuration', () => {
-  it('uses Release Drafter on pushes to main and pull request updates', () => {
+  it('drafts releases from commit history on pushes to main', () => {
     const workflow = loadYaml('.github/workflows/release-drafter.yml');
+    const job = workflow.jobs.update_release_draft;
+    const steps = job.steps as Array<Record<string, any>>;
 
     expect(workflow.on.push.branches).toEqual(['main']);
-    expect(workflow.on.pull_request.types).toEqual(['opened', 'reopened', 'synchronize']);
-    expect(workflow.jobs.update_release_draft.permissions.contents).toBe('write');
-    expect(workflow.jobs.update_release_draft.permissions['pull-requests']).toBe('write');
-    expect(workflow.jobs.update_release_draft.steps[0].uses).toBe('release-drafter/release-drafter@v6');
+    expect(workflow.on.pull_request).toBeUndefined();
+    expect(job.permissions.contents).toBe('write');
+    expect(steps[0].with['fetch-depth']).toBe(0);
+    expect(JSON.stringify(steps)).not.toContain('release-drafter/release-drafter');
+    expect(steps.find((step) => step.id === 'notes')?.run).toContain('.github/scripts/release-notes.mjs version');
   });
 
-  it('defines ImgBin release drafter categories and semantic version resolution', () => {
-    const config = loadYaml('.github/release-drafter.yml');
-
-    expect(config['name-template']).toBe('ImgBin v$RESOLVED_VERSION');
-    expect(config['tag-template']).toBe('v$RESOLVED_VERSION');
-    expect(config['version-resolver'].default).toBe('patch');
-    expect(config.categories).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ title: 'Features' }),
-        expect.objectContaining({ title: 'Fixes' }),
-        expect.objectContaining({ title: 'Documentation' })
-      ])
+  it('titles the draft release ImgBin v<version>', () => {
+    const workflow = loadYaml('.github/workflows/release-drafter.yml');
+    const draftStep = (workflow.jobs.update_release_draft.steps as Array<Record<string, any>>).find((step) =>
+      step.name?.startsWith('Create or update')
     );
+
+    expect(draftStep?.env.TITLE_TEMPLATE).toBe('ImgBin v{version}');
+    expect(draftStep?.run).toContain('--draft');
   });
 
   it('publishes stable releases only from the GitHub release published event', () => {
