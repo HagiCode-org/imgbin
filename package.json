@@ -31,11 +31,20 @@
     "test:watch": "vitest"
   },
   "keywords": [
+    "hagicode",
+    "hagicode-org",
     "cli",
     "image",
+    "image-generation",
     "metadata",
-    "thumbnail"
+    "thumbnail",
+    "annotation",
+    "ai-image"
   ],
+  "author": {
+    "name": "HagiCode",
+    "url": "https://github.com/HagiCode-org"
+  },
   "engines": {
     "node": ">=24.0.0"
   },
