@@ -1,6 +1,6 @@
 # ImgBin
 
-[![npm version](https://img.shields.io/npm/v/%40hagicode%2Fimgbin?logo=npm)](https://www.npmjs.com/package/@hagicode/imgbin)
+[![npm version](https://img.shields.io/npm/v/%40hagicode%2Fimgbin?logo=npm&color=cb3837)](https://www.npmjs.com/package/@hagicode/imgbin)
 
 [English](./README.md)
 
