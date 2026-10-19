@@ -18,15 +18,16 @@ Run commands from `repos/imgbin/`.
 npm install
 npm run dev
 npm run build
-npm test
+npm test                    # vitest run
 npm run pack:check
+npm run dev -- <args>       # run the CLI from source via tsx
 ```
 
 Requires Node.js 24+. `npm run pack:check` verifies the packed npm contents; run build, test and `pack:check` before a release.
 
 ## Key Paths
 
-- `src/`: CLI source (bin entry: `dist/cli.js`); `src/commands/` holds subcommands, `src/providers/` the image and analysis backends
+- `src/`: CLI source (bin entry: `dist/cli.js`); `src/commands/` holds subcommands, `src/providers/` the image and analysis backends, `src/services/` the asset writer, job runner, metadata, search index and thumbnail logic, `src/lib/` shared config, paths, schema and runtime helpers
 - `src/__tests__/`: vitest tests (including release workflow and version-script checks)
 - `scripts/`: npm publish and release-version helpers used by CI
 - `.env.example`: documented provider environment variables (copy to `.env`; never commit `.env`)
