@@ -47,5 +47,3 @@ Requires Node.js 24+. `npm run pack:check` verifies the packed npm contents; run
 ## References
 
 - `README.md`
-- `skills/README.md`
-- `skills/imgbin-cli/SKILL.md`
