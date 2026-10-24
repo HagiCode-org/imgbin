@@ -38,83 +38,21 @@ You can bootstrap local configuration from the checked-in example:
 cp .env.example .env
 ```
 
-## Release automation
-
-ImgBin includes a GitHub Actions based npm publishing workflow for both prerelease and stable channels, plus a GitHub Release Drafter workflow that keeps the next stable release in draft form.
-
-### Publishing channels
-
-- Pushes to `main` publish a unique prerelease build to the npm `dev` dist-tag.
-- Pushes to `main` also refresh the GitHub draft release notes through Release Drafter.
-- Stable releases publish only when a GitHub draft release for tag `vX.Y.Z` is published and target the npm `latest` dist-tag.
-- The stable release workflow derives the publish version from the GitHub Release tag, temporarily rewrites `package.json` to that version inside CI, and then verifies the rewritten manifest before publishing.
-
-### Release draft flow
-
-The draft is generated from the commit history since the latest `vX.Y.Z` tag by `HagiCode-org/hagi-release-drafter@v0.1.2`, called from `repos/imgbin/.github/workflows/release-draft-action.yml`. The workflow sets top-level `contents: read`, gives only the draft job `contents: write`, checks out with `fetch-depth: 0` and `fetch-tags: true`, and uses the title `ImgBin v{version}`. A `feat` bumps the minor version, a breaking change bumps the minor (0.x) or major version, and anything else bumps the patch; run the workflow manually with the `version` input to override.
-
-1. Commit to `main` (directly or through merged PRs) using Conventional Commit messages (`feat:`, `fix:`, `docs:`, ..., `!` or a `BREAKING CHANGE:` footer for breaking changes). No PR labels are needed.
-2. Let `repos/imgbin/.github/workflows/release-draft-action.yml` refresh the draft release notes in GitHub Releases.
-3. Review the draft release in the GitHub UI.
-4. If the release is not ready, continue merging fixes or delete the draft release directly in GitHub.
-5. When ready, publish the draft release in GitHub. That `release.published` event triggers the stable npm `latest` publish workflow.
-
-Release Drafter manages the draft notes only. Draft review, delete, and publish remain native GitHub Release operations; ImgBin intentionally does not add a custom draft lifecycle script on top.
-
-### Trusted publishing prerequisites
-
-Before the workflows can publish successfully:
-
-1. configure npm trusted publishing for the `HagiCode-org/imgbin` GitHub repository,
-2. ensure the npm organization or user scope `hagicode` already exists and the publishing identity can create or update `@hagicode/imgbin`, and
-3. keep GitHub Actions enabled for the repository.
-
-The workflows are designed to publish with GitHub OIDC identity and provenance, not a long-lived `NPM_TOKEN`.
-Keep the trusted publisher configuration pointed at the repository's single publish workflow file. In npm trusted publishing, use package `@hagicode/imgbin`, owner `HagiCode-org`, repository `imgbin`, and workflow filename `npm-publish.yml`. Do not enter the full workflow path as the filename; leave the npm environment field empty unless the workflow job explicitly declares an environment.
-
-If the scope is missing or the workflow identity cannot create packages under it, npm returns `E404 Not Found` during the final `PUT https://registry.npmjs.org/@hagicode%2fimgbin` publish request.
-
-### Local release verification
-
-Before publishing a stable draft release, run the same checks used by CI:
-
-```bash
-npm run build
-npm test
-npm run pack:check
-```
-
-For a stable release:
-
-1. make sure the Release Drafter draft uses the target stable tag such as `v0.1.1`,
-2. optionally simulate the workflow locally by rewriting a temporary copy of `package.json` to `0.1.1` and running `node scripts/verify-release-version.mjs v0.1.1 /path/to/temp-package.json`, and
-3. publish that draft release from the GitHub UI.
-
-The stable publish workflow checks out the published release tag, resolves `0.1.1` from `v0.1.1`, temporarily rewrites `package.json` to `0.1.1`, and then validates that rewritten manifest before running `npm publish --tag latest`.
-
-### Troubleshooting release drafts
-
-- If the draft notes are empty or mis-categorized, check that the commit messages since the latest tag follow Conventional Commits (the `hagi-release-drafter` action groups them).
-- If `latest` did not publish after releasing the draft, inspect `repos/imgbin/.github/workflows/npm-publish.yml` for the `release.published` run.
-- If the workflow reports a version mismatch, compare the published release tag with the temporary `package.json` rewrite step output and rerun after correcting the release tag or manifest source.
-- If the workflow fails with `npm ERR! code E404` while publishing `@hagicode/imgbin`, verify that the npm scope `hagicode` exists, that the package can be created or updated by the publishing identity, and that the trusted publisher is configured for workflow filename `npm-publish.yml`.
-- If you need to discard a pending stable release, delete the draft release in GitHub before publishing it.
-
 ## Usage guide
 
 ### Quick start for the current HagiCode site workflow
 
-ImgBin now matches the Azure image-generation request format that was previously used in `repos/site/scripts/generate-image.sh`.
+ImgBin uses the Azure image-generation request format.
 
 That means the current recommended setup is:
 
 1. configure Azure image generation for output,
 2. configure a non-interactive multimodal analysis provider (`claude`, `codex`, or `http`), and
-3. run `imgbin generate` directly or call it through the site wrapper or CI automation.
+3. run `imgbin generate` directly or call it from your own scripts or CI automation.
 
 ### Minimal `.env` example
 
-Put this in `repos/imgbin/.env`:
+Put this in `.env` at the project root:
 
 ```bash
 # Azure image generation
@@ -251,7 +189,7 @@ imgbin generate \
 
 ```bash
 imgbin generate \
-  --prompt-file ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json \
+  --prompt-file ./prompts/hero/prompt.json \
   --output ./library \
   --analysis-context "This prompt file generates a documentation hero asset with interface-inspired card layout." \
   --annotate
@@ -419,7 +357,7 @@ imgbin batch \
 
 ```yaml
 jobs:
-  - promptFile: ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json
+  - promptFile: ./prompts/hero/prompt.json
     slug: docs-ai-assisted-coding
     tags: [docs, hero]
     annotate: true
@@ -473,7 +411,7 @@ That means non-interactive runs only need a deterministic provider selection plu
 
 ## Notes on image provider requests
 
-The built-in provider is now optimized for the Azure image-generation request format previously used by the site workflow.
+The built-in provider is now optimized for the Azure image-generation request format.
 
 ### Current Azure-style request body
 
@@ -494,26 +432,6 @@ The built-in provider is now optimized for the Azure image-generation request fo
 2. Raw image bytes (`Content-Type: image/png`, etc.)
 3. JSON with `imageBase64`
 4. JSON with `imageUrl`
-
-## Repository hygiene
-
-This repository ignores local build outputs and generated asset libraries by default:
-
-- `dist/`
-- `node_modules/`
-- `.env*`
-- `library/`
-- temporary test output directories such as `.tmp/` and `.vitest-temp/`
-
-If you want to commit sample assets, place them outside ignored runtime directories and document them explicitly.
-
-## Development workflow
-
-```bash
-npm install
-npm run test
-npm run build
-```
 
 ## License
 

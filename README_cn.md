@@ -35,83 +35,21 @@ npm run dev -- --help
 cp .env.example .env
 ```
 
-## 发布自动化
-
-ImgBin 包含基于 GitHub Actions 的 npm 发布工作流，用于预发布和稳定发布渠道，外加一个 GitHub Release Drafter 工作流，使下一个稳定版本保持为草稿形式。
-
-### 发布渠道
-
-- 推送到 `main` 会将唯一的预发布构建发布到 npm 的 `dev` dist-tag。
-- 推送到 `main` 还会通过 Release Drafter 刷新 GitHub 草稿发布说明。
-- 稳定发布仅在发布标签为 `vX.Y.Z` 的 GitHub 草稿发布时发布，目标是 npm 的 `latest` dist-tag。
-- 稳定发布工作流从 GitHub Release 标签获取发布版本，在 CI 内临时重写 `package.json` 为该版本，然后在发布前验证重写的清单。
-
-### 草稿发布流程
-
-草稿由 `HagiCode-org/hagi-release-drafter@v0.1.2` 根据最新 `vX.Y.Z` 标签以来的提交历史生成，调用方为 `repos/imgbin/.github/workflows/release-draft-action.yml`。该工作流将顶层权限设为 `contents: read`，仅草稿作业持有 `contents: write`，检出时使用 `fetch-depth: 0` 和 `fetch-tags: true`，标题为 `ImgBin v{version}`。`feat` 提升次版本号，破坏性变更在 0.x 阶段提升次版本号（之后提升主版本号），其余提升补丁号；也可手动运行工作流并通过 `version` 输入覆盖。
-
-1. 向 `main` 提交（直接推送或通过合并 PR 均可），提交信息使用 Conventional Commits 格式（`feat:`、`fix:`、`docs:` 等；破坏性变更使用 `!` 或 `BREAKING CHANGE:` 页脚）。不再需要 PR 标签。
-2. 让 `repos/imgbin/.github/workflows/release-draft-action.yml` 在 GitHub Releases 中刷新草稿发布说明。
-3. 在 GitHub UI 中查看草稿发布。
-4. 如果发布还未准备好，继续合并修复或在 GitHub 中直接删除草稿发布。
-5. 准备好后，在 GitHub 中发布草稿发布。那 `release.published` 事件会触发稳定的 npm `latest` 发布工作流。
-
-Release Drafter 仅管理草稿说明。草稿审查、删除和发布仍是原生 GitHub Release 操作；ImgBin 有意不在此基础上添加自定义的草稿生命周期脚本。
-
-### 信任发布前提条件
-
-在工作流能成功发布之前：
-
-1. 为 `HagiCode-org/imgbin` GitHub 仓库配置 npm 信任发布，
-2. 确保 npm 上已经存在 `hagicode` 这个组织或用户 scope，并且当前发布身份有权创建或更新 `@hagicode/imgbin`，以及
-3. 保持仓库启用 GitHub Actions。
-
-这些工作流设计为使用 GitHub OIDC 身份和来源发布，而不是长期有效的 `NPM_TOKEN`。
-将信任发布配置指向仓库的单个发布工作流文件。在 npm trusted publishing 中，填写 package `@hagicode/imgbin`、owner `HagiCode-org`、repository `imgbin`、workflow filename `npm-publish.yml`。不要把 workflow filename 填成完整路径；如果 npm 表单里有 environment 字段，除非 workflow job 显式声明了 environment，否则保持为空。
-
-如果 scope 不存在，或工作流身份无权在该 scope 下创建包，npm 会在最后的 `PUT https://registry.npmjs.org/@hagicode%2fimgbin` 发布请求中返回 `E404 Not Found`。
-
-### 本地发布验证
-
-在发布稳定的草稿发布之前，运行与 CI 相同的检查：
-
-```bash
-npm run build
-npm test
-npm run pack:check
-```
-
-对于稳定发布：
-
-1. 确保 Release Drafter 草稿使用目标稳定标签，例如 `v0.1.1`，
-2. 可选地通过将临时副本的 `package.json` 重写为 `0.1.1` 并运行 `node scripts/verify-release-version.mjs v0.1.1 /path/to/temp-package.json` 在本地模拟工作流，然后
-3. 从 GitHub UI 发布该草稿发布。
-
-稳定发布工作流检出已发布的发布标签，从 `v0.1.1` 解析 `0.1.1`，临时重写 `package.json` 为 `0.1.1`，然后在运行 `npm publish --tag latest` 之前验证重写的清单。
-
-### 草稿发布故障排除
-
-- 如果草稿说明为空或分类错误，请检查最新标签以来的提交信息是否符合 Conventional Commits（由 `hagi-release-drafter` 操作分组）。
-- 如果发布草稿后 `latest` 未发布，请检查 `repos/imgbin/.github/workflows/npm-publish.yml` 中的 `release.published` 运行。
-- 如果工作流报告版本不匹配，请将已发布的发布标签与临时 `package.json` 重写步骤输出进行比较，并在更正发布标签或清单源后重新运行。
-- 如果发布 `@hagicode/imgbin` 时工作流报 `npm ERR! code E404`，先确认 npm 上已经存在 `hagicode` scope、当前发布身份有权创建或更新该包，并且 trusted publisher 配置里的 workflow filename 是 `npm-publish.yml`。
-- 如果需要丢弃待处理的稳定发布，请在发布前在 GitHub 中删除草稿发布。
-
 ## 使用指南
 
 ### 当前 HagiCode 站点工作流的快速开始
 
-ImgBin 现在匹配之前在 `repos/site/scripts/generate-image.sh` 中使用的 Azure 图片生成请求格式。
+ImgBin 使用 Azure 图片生成请求格式。
 
 这意味着当前推荐的设置是：
 
 1. 为输出配置 Azure 图片生成，
 2. 配置非交互式多模态分析 provider（`claude`、`codex` 或 `http`），然后
-3. 直接运行 `imgbin generate` 或通过站点包装器或 CI 自动化调用它。
+3. 直接运行 `imgbin generate`，或在你自己的脚本或 CI 自动化中调用它。
 
 ### 最小 `.env` 示例
 
-将以下内容放入 `repos/imgbin/.env`：
+将以下内容放入项目根目录的 `.env`：
 
 ```bash
 # Azure 图片生成
@@ -247,7 +185,7 @@ imgbin generate \
 
 ```bash
 imgbin generate \
-  --prompt-file ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json \
+  --prompt-file ./prompts/hero/prompt.json \
   --output ./library \
   --analysis-context "This prompt file generates a documentation hero asset with interface-inspired card layout." \
   --annotate
@@ -415,7 +353,7 @@ imgbin batch \
 
 ```yaml
 jobs:
-  - promptFile: ../docs/src/content/docs/img/product-overview/value-proposition-ai-assisted-coding/prompt.json
+  - promptFile: ./prompts/hero/prompt.json
     slug: docs-ai-assisted-coding
     tags: [docs, hero]
     annotate: true
@@ -469,7 +407,7 @@ ImgBin 通过配置的 provider 路由元数据分析。对于基于 CLI 的 pro
 
 ## 图片 provider 请求说明
 
-内置 provider 现在已针对之前站点工作流使用的 Azure 图片生成请求格式进行了优化。
+内置 provider 现在已针对 Azure 图片生成请求格式进行了优化。
 
 ### 当前 Azure 风格请求体
 
@@ -491,22 +429,6 @@ ImgBin 通过配置的 provider 路由元数据分析。对于基于 CLI 的 pro
 3. 带 `imageBase64` 的 JSON
 4. 带 `imageUrl` 的 JSON
 
-## 仓库规范
+## 许可证
 
-此仓库默认忽略本地构建输出和生成的资源库：
-
-- `dist/`
-- `node_modules/`
-- `.env*`
-- `library/`
-- 临时测试输出目录如 `.tmp/` 和 `.vitest-temp/`
-
-如果您想提交示例资源，请将它们放在被忽略的运行时目录之外，并明确记录它们。
-
-## 开发工作流
-
-```bash
-npm install
-npm run test
-npm run build
-```
+MIT。参见 [LICENSE](./LICENSE)。
