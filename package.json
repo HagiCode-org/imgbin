@@ -21,7 +21,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "export NODE_OPTIONS=\"${NODE_OPTIONS:-} --max-old-space-size=4096\"; tsc -p tsconfig.json",
     "clean": "rm -rf dist .vitest-temp .tmp coverage",
     "dev": "tsx src/cli.ts",
     "pack:check": "node scripts/verify-package.mjs",
@@ -64,6 +64,6 @@
     "@types/node": "^24.5.2",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.5"
   }
 }
