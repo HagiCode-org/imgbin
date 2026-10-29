@@ -24,7 +24,10 @@ const timestamp = new Date()
 const runNumber = process.env.GITHUB_RUN_NUMBER ?? "0";
 const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? "0";
 const shortSha = (process.env.GITHUB_SHA ?? "local").slice(0, 7).toLowerCase();
-const devVersion = `${baseVersion}-dev.${timestamp}.${runNumber}.${runAttempt}.${shortSha}`;
+// SemVer reads an all-digit identifier as a number (and refuses one with a leading zero), so a sha made only of
+// digits gets a `g` prefix, as in `git describe`. A sha with a letter in it is already a valid identifier.
+const semverSafeSha = /^\d+$/.test(shortSha) ? `g${shortSha}` : shortSha;
+const devVersion = `${baseVersion}-dev.${timestamp}.${runNumber}.${runAttempt}.${semverSafeSha}`;
 
 packageJson.version = devVersion;
 fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
