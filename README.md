@@ -22,14 +22,14 @@ For repo-local AI guidance and command-selection references, start at [`./skills
 ## Installation
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 During local development you can run the CLI without building:
 
 ```bash
-npm run dev -- --help
+pnpm run dev --help
 ```
 
 You can bootstrap local configuration from the checked-in example:

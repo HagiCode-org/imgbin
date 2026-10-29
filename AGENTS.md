@@ -15,15 +15,15 @@ Run commands from `repos/imgbin/`.
 ## Key Commands
 
 ```bash
-npm install
-npm run dev
-npm run build
-npm test                    # vitest run
-npm run pack:check
-npm run dev -- <args>       # run the CLI from source via tsx
+pnpm install
+pnpm run dev
+pnpm run build
+pnpm test                    # vitest run
+pnpm run pack:check
+pnpm run dev <args>       # run the CLI from source via tsx
 ```
 
-Requires Node.js 24+. `npm run pack:check` verifies the packed npm contents; run build, test and `pack:check` before a release.
+Requires Node.js 24+. `pnpm run pack:check` verifies the packed npm contents; run build, test and `pack:check` before a release.
 
 ## Key Paths
 
@@ -47,3 +47,10 @@ Requires Node.js 24+. `npm run pack:check` verifies the packed npm contents; run
 ## References
 
 - `README.md`
+
+## Package management
+
+- The repository uses pnpm, pinned in `package.json` `packageManager`. Run `corepack enable` once, then `pnpm install`. `pnpm-lock.yaml` is the only lockfile; do not commit `package-lock.json`.
+- Settings live in `pnpm-workspace.yaml`. `allowBuilds` lists the dependencies whose install scripts may run (reviewed individually, `false` means reviewed and denied); review any new dependency that has an install script and add it there.
+- A local registry mirror belongs in `~/.npmrc` only. Never commit a `registry=` line or a mirror URL; `pnpm run check:registry` (also run in CI) fails on any non-`registry.npmjs.org` `tarball` in the lockfile and on mirror hosts in tracked files.
+- Undeclared imports fail under pnpm's strict layout: declare the package instead of hoisting it.

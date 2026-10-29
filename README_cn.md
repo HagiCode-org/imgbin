@@ -19,14 +19,14 @@ ImgBin 是一个 TypeScript CLI，用于生成图片资源、将现有图片导�
 ## 安装
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 在本地开发期间，您可以无需构建直接运行 CLI：
 
 ```bash
-npm run dev -- --help
+pnpm run dev --help
 ```
 
 您可以从已提交的示例引导本地配置：
